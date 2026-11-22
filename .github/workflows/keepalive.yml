@@ -12,7 +12,7 @@ jobs:
     steps:
       - name: Zeitfenster prüfen und pingen
         env:
-          APP_URL: ${{ vars.APP_URL }}
+          APP_URL: ${{ vars.APP_URL || 'https://grand-prix-ambition.onrender.com' }}
         run: |
           NOW=$(TZ=Europe/Zurich date +%Y%m%d%H%M)
           if [ "$NOW" -lt 202611250700 ] || [ "$NOW" -ge 202612241200 ]; then echo "Ausserhalb des Zeitfensters ($NOW) – kein Ping."; exit 0; fi
