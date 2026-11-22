@@ -210,8 +210,9 @@ const randomLook = () => ({ vehicle: pick(LOOK.vehicle), color: pick(PALETTE), s
 
 function addPerson(b) {
   const name = clean(b.name, 30);
-  const goal = Math.max(1, Math.min(9999, parseInt(b.goal, 10) || 0));
-  if (!name || !goal) return { error: 'Name und Ziel angeben' };
+  const g = parseInt(b.goal, 10);
+  if (!name || !(g >= 1)) return { error: 'Bitte Name und Ambitionsniveau (mind. 1 Termin) angeben' };
+  const goal = Math.min(9999, g);
   if (state.people.some(x => x.name.toLowerCase() === name.toLowerCase())) return { error: 'Name existiert schon', code: 409 };
   if (state.people.length >= 60) return { error: 'Maximal 60 Personen' };
   const person = { id: id(), name, goal, look: guardRewards({ id: '', goal, look: {} }, cleanLook(b.look, { ...randomLook(), initials: makeInitials(name) })), createdAt: new Date().toISOString() };
