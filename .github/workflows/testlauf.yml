@@ -1,0 +1,23 @@
+name: testlauf
+on:
+  push:
+    branches: [testlauf]
+    paths: ['tests/plan.txt']
+permissions:
+  contents: write
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 20 }
+      - name: Testlauf gegen die echte App
+        env:
+          APP_URL: https://grand-prix-ambition.onrender.com
+        run: node tests/testlauf.mjs
+      - name: Ergebnis zurückschreiben
+        if: always()
+        run: |
+          git config user.name "testlauf-bot"; git config user.email "noreply@github.com"
+          git add results; git commit -m "Ergebnis Testlauf $(cat tests/plan.txt)" || true; git push
