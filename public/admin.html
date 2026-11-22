@@ -1,0 +1,242 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="robots" content="noindex">
+<title>Rennleitung</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🛠️</text></svg>">
+<style>
+:root{--bg:#0d1511;--panel:#142019;--panel2:#1a2a21;--line:#2a3f33;--text:#eef6f0;--muted:#97ae9f;--red:#e63946;--gold:#ffd23f;--green:#06d6a0;--blue:#3a86ff}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--text);font:15px/1.45 Inter,system-ui,-apple-system,Segoe UI,Roboto,sans-serif;min-height:100vh}
+button,input,select{font:inherit;color:inherit}
+button{cursor:pointer;background:none;border:0}
+.wrap{max-width:1240px;margin:0 auto;padding:0 clamp(12px,3vw,24px) 40px}
+header{display:flex;align-items:center;gap:10px;padding:16px 0;flex-wrap:wrap}
+header h1{font-size:clamp(20px,5vw,26px);flex:1;min-width:180px}
+header h1 small{display:block;font-size:12px;color:var(--muted);font-weight:600}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:9px 14px;border-radius:10px;background:var(--panel2);border:1px solid var(--line);font-weight:700;white-space:nowrap;text-decoration:none;color:var(--text)}
+.btn.pri{background:var(--green);border-color:var(--green);color:#052a1f}
+.btn.danger{background:#3a1715;border-color:#6b2420;color:#ffb4ae}
+.btn.sm{padding:5px 9px;font-size:13px;border-radius:8px}
+.btn:disabled{opacity:.5}
+.warn{background:#3d2f08;border:1px solid #7a5d0f;color:#ffe08a;border-radius:12px;padding:10px 14px;margin-bottom:14px;font-size:14px}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:16px}
+.kpi{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:12px 14px}
+.kpi b{display:block;font-size:26px;line-height:1.1}
+.kpi span{font-size:12px;color:var(--muted);font-weight:600}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:14px;margin-bottom:16px}
+.panel h2{font-size:17px;margin-bottom:10px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.panel h2 .sp{flex:1}
+.field{width:100%;padding:8px 10px;border-radius:9px;border:1px solid var(--line);background:var(--bg)}
+.field:focus{outline:2px solid var(--blue);outline-offset:0}
+label{display:block;font-size:12px;font-weight:700;color:var(--muted);margin:0 0 4px}
+.grid{display:grid;gap:10px;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));align-items:end}
+.tbl{width:100%;border-collapse:collapse}
+.tbl th{font-size:11px;text-transform:uppercase;letter-spacing:.4px;color:var(--muted);text-align:left;padding:6px;border-bottom:1px solid var(--line);white-space:nowrap}
+.tbl td{padding:7px 6px;border-bottom:1px solid var(--line);vertical-align:middle}
+.tbl tr:last-child td{border-bottom:0}
+.ini{text-transform:uppercase;letter-spacing:1px;font-weight:800}
+.badge{display:inline-grid;place-items:center;min-width:32px;height:28px;border-radius:999px;font-weight:900;font-size:12px;padding:0 6px}
+.cnt{display:flex;align-items:center;gap:4px}
+.cnt b{min-width:30px;text-align:center;font-size:17px}
+.bar{height:6px;background:#203328;border-radius:4px;overflow:hidden;min-width:60px}
+.bar i{display:block;height:100%;background:var(--gold)}
+.pos{color:#7dffb0;font-weight:700}.neg{color:#ff9b9b;font-weight:700}
+.muted{color:var(--muted);font-size:13px}
+.log{max-height:420px;overflow:auto}
+.login{max-width:380px;margin:12vh auto 0;background:var(--panel);border:1px solid var(--line);border-radius:18px;padding:24px}
+.login h1{font-size:24px;margin-bottom:4px}
+.login .row{margin-top:12px}
+.err{color:#ff9b9b;font-size:13px;min-height:18px;margin-top:8px}
+.toast{position:fixed;left:50%;bottom:18px;transform:translate(-50%,150%);background:#fff;color:#111;font-weight:800;padding:10px 16px;border-radius:999px;z-index:50;transition:transform .3s;box-shadow:0 8px 24px rgba(0,0,0,.4);max-width:calc(100vw - 24px)}
+.toast.show{transform:translate(-50%,0)}
+.cols{display:grid;gap:16px;grid-template-columns:1fr}
+@media (min-width:980px){.cols{grid-template-columns:1.1fr .9fr}}
+/* Tabelle wird auf schmalen Bildschirmen zu Karten */
+@media (max-width:820px){
+  .tbl.people thead{display:none}
+  .tbl.people tr{display:grid;grid-template-columns:1fr 1fr;gap:8px 12px;padding:14px 0;border-bottom:1px solid var(--line);align-items:end}
+  .tbl.people td{border:0;padding:0;min-width:0}
+  .tbl.people td[data-l]::before{content:attr(data-l);display:block;font-size:11px;color:var(--muted);font-weight:700;text-transform:uppercase;margin-bottom:3px}
+  .tbl.people td.c-badge{display:none}
+  .tbl.people td.c-name{grid-column:1/3}
+  .tbl.people td.c-name .field{font-weight:800;font-size:16px}
+  .tbl.people td.c-act{display:flex;justify-content:flex-end}
+  .tbl.people select,.tbl.people input{width:100%!important}
+}
+.chk{display:flex;gap:8px;align-items:center;font-size:14px;color:var(--text);font-weight:600;text-transform:none;letter-spacing:0}
+.chk input{width:18px;height:18px}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div class="toast" id="toast"></div>
+<script>
+(() => {
+'use strict';
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const ss = { get(k){ try { return sessionStorage.getItem(k); } catch { return null; } }, set(k,v){ try { v == null ? sessionStorage.removeItem(k) : sessionStorage.setItem(k,v); } catch {} } };
+const VEH = { rocket:'🚀 Raketenauto', snail:'🐌 Turboschnecke', turtle:'🐢 Düsenschildkröte', cow:'🐄 Rennkuh', tub:'🛁 Badewannen-Flitzer', cheese:'🧀 Käse-Mobil', mower:'🌱 Rasenmäher-Rakete', banana:'🍌 Bananen-Kart', cart:'🛒 Einkaufswagen-Jet', unicorn:'🦄 Turbo-Einhorn' };
+const ink = c => { const n = parseInt((c || '#3a86ff').slice(1), 16), r = n >> 16, g = (n >> 8) & 255, b = n & 255; return (r*299 + g*587 + b*114) / 1000 > 150 ? '#111' : '#fff'; };
+const mkIni = n => String(n || '').split(/\s+/).map(w => w[0] || '').join('').slice(0, 3).toUpperCase();
+const parseD = s => { const [y,m,d] = s.split('-').map(Number); return new Date(y, m-1, d); };
+let token = ss.get('gp_admin'), S = null, es = null, defaultLogin = ss.get('gp_admin_def') === '1', logFilter = '';
+
+async function api(path, opt = {}) {
+  const r = await fetch(path, { method: opt.method || 'GET', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token }, body: opt.body ? JSON.stringify(opt.body) : undefined });
+  const j = await r.json().catch(() => ({}));
+  if (r.status === 403 || r.status === 401) { logout(true); throw new Error(j.error || 'Bitte neu anmelden'); }
+  if (!r.ok) throw new Error(j.error || 'Fehler');
+  return j;
+}
+let tT; function toast(m) { const t = $('#toast'); t.textContent = m; t.classList.add('show'); clearTimeout(tT); tT = setTimeout(() => t.classList.remove('show'), 2200); }
+
+// ---------- Login ----------
+function showLogin(msg) {
+  $('#app').innerHTML = `<form class="login" id="lf"><h1>🛠️ Rennleitung</h1><p class="muted">Grand Prix Ambition – Backend</p>
+    <div class="row"><label for="u">Benutzername</label><input class="field" id="u" autocomplete="username" required></div>
+    <div class="row"><label for="pw">Passwort</label><input class="field" id="pw" type="password" autocomplete="current-password" required></div>
+    <div class="err" id="err">${esc(msg || '')}</div>
+    <div class="row"><button class="btn pri" style="width:100%">Anmelden</button></div>
+    <p class="muted" style="margin-top:14px;text-align:center"><a href="/" style="color:var(--muted)">← zur App</a></p></form>`;
+  $('#u').focus();
+  $('#lf').onsubmit = async e => { e.preventDefault();
+    const r = await fetch('/api/admin/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ user: $('#u').value, password: $('#pw').value }) });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) { $('#err').textContent = j.error || 'Anmeldung fehlgeschlagen'; return; }
+    token = j.token; ss.set('gp_admin', token); defaultLogin = !!j.defaultLogin; ss.set('gp_admin_def', defaultLogin ? '1' : '0'); start(); };
+}
+function logout(expired) { if (es) es.close(); if (token && !expired) fetch('/api/admin/logout', { method: 'POST', headers: { Authorization: 'Bearer ' + token } }); token = null; ss.set('gp_admin', null); showLogin(expired ? 'Sitzung abgelaufen – bitte neu anmelden.' : ''); }
+
+// ---------- Daten ----------
+function compute() {
+  const st = parseD(S.settings.startDate), en = parseD(S.settings.endDate); en.setHours(23,59,59);
+  const frac = Math.max(0, Math.min(1, (Date.now() - st) / (en - st))), daysLeft = Math.max(0, Math.ceil((en - Date.now()) / 864e5));
+  const by = {}; S.people.forEach(p => by[p.id] = { ...p, count: 0, last: null });
+  for (const e of S.entries) { const x = by[e.personId]; if (!x) continue; x.count += e.delta; if (e.delta > 0) x.last = e.ts; }
+  const list = Object.values(by).map(x => ({ ...x, pct: x.count / x.goal, diff: x.count - Math.round(x.goal * frac) }));
+  list.sort((a, b) => b.pct - a.pct || a.name.localeCompare(b.name));
+  return { list, frac, daysLeft };
+}
+
+// ---------- Oberfläche ----------
+function start() {
+  $('#app').innerHTML = `<div class="wrap">
+    <header><h1>🛠️ Rennleitung<small id="sub"></small></h1>
+      <a class="btn" href="/" target="_blank" rel="noopener">Zur App ↗</a><button class="btn" id="out">Abmelden</button></header>
+    ${defaultLogin ? '<div class="warn">⚠️ Es ist noch der Standard-Login <b>XY / XY</b> aktiv. Bitte beim Hosting (Render → Environment) <b>ADMIN_USER</b> und <b>ADMIN_PASSWORD</b> setzen.</div>' : ''}
+    <div class="kpis" id="kpis"></div>
+    <div class="panel"><h2>👥 Teilnehmende <span class="sp"></span><span class="muted" id="pcount"></span></h2>
+      <div style="overflow-x:auto"><table class="tbl people"><thead><tr><th></th><th>Name</th><th>Initialen</th><th>Fahrzeug</th><th>Ziel</th><th>Termine</th><th>Fortschritt</th><th>Etappe</th><th>Letzter Termin</th><th></th></tr></thead><tbody id="rows"></tbody></table></div>
+      <form class="grid" id="addF" style="margin-top:14px;border-top:1px dashed var(--line);padding-top:14px">
+        <div><label for="nN">Neue Person: Name</label><input class="field" id="nN" maxlength="30" required></div>
+        <div><label for="nI">Initialen</label><input class="field ini" id="nI" maxlength="3"></div>
+        <div><label for="nG">Ambitionsniveau</label><input class="field" id="nG" type="number" min="1" max="9999" required></div>
+        <div><button class="btn pri" style="width:100%">+ Hinzufügen</button></div></form></div>
+    <div class="cols">
+      <div class="panel"><h2>📜 Termin-Protokoll <span class="sp"></span><select class="field" id="lf2" style="width:auto"></select></h2><div class="log"><table class="tbl"><tbody id="log"></tbody></table></div></div>
+      <div>
+        <div class="panel"><h2>⚙️ Einstellungen</h2><form id="setF" style="display:grid;gap:10px">
+          <div><label for="sT">Titel</label><input class="field" id="sT" maxlength="50"></div>
+          <div class="grid"><div><label for="sS">Start</label><input class="field" id="sS" type="date"></div><div><label for="sE">Ziel-Datum</label><input class="field" id="sE" type="date"></div></div>
+          <div><label for="sC">Zugangscode für die App (leer = ohne Code)</label><input class="field" id="sC" maxlength="40" autocomplete="off"></div>
+          <label class="chk"><input type="checkbox" id="sL"> Ambitionsniveau sperren (nur die Rennleitung kann Ziele ändern)</label>
+          <div class="grid"><div><label for="sQF">Nachtruhe ab</label><input class="field" id="sQF" type="time"></div><div><label for="sQT">Nachtruhe bis</label><input class="field" id="sQT" type="time"></div></div>
+          <label class="chk"><input type="checkbox" id="sQW"> Am Wochenende ganz ruhen</label>
+          <p class="muted">In der Nachtruhe trennt sich die App vom Server. So schläft der Gratis-Server bei Render und spart Stunden. Leere Zeiten = keine Nachtruhe.</p>
+          <button class="btn pri">Einstellungen speichern</button></form></div>
+        <div class="panel"><h2>💾 Daten</h2><div style="display:flex;flex-wrap:wrap;gap:8px">
+          <button class="btn" id="exJ">Sicherung (JSON)</button><button class="btn" id="exC">Auswertung (CSV)</button><button class="btn" id="imB">Sicherung einspielen</button>
+          <input type="file" id="imF" accept="application/json" hidden></div>
+          <div style="margin-top:14px;padding-top:12px;border-top:1px dashed var(--line)"><button class="btn danger" id="rst">Alle Termine auf 0 setzen</button></div></div>
+      </div></div></div>`;
+  $('#out').onclick = () => logout(false);
+  $('#nN').oninput = () => { $('#nI').placeholder = mkIni($('#nN').value); };
+  $('#addF').onsubmit = async e => { e.preventDefault();
+    try { await api('/api/admin/people', { method: 'POST', body: { name: $('#nN').value, goal: $('#nG').value, look: { initials: $('#nI').value || mkIni($('#nN').value) } } });
+      e.target.reset(); toast('✅ Person hinzugefügt'); } catch (err) { toast('⚠️ ' + err.message); } };
+  $('#setF').onsubmit = async e => { e.preventDefault();
+    try { await api('/api/admin/settings', { method: 'POST', body: { title: $('#sT').value, startDate: $('#sS').value, endDate: $('#sE').value, accessCode: $('#sC').value, lockGoals: $('#sL').checked, quietFrom: $('#sQF').value, quietTo: $('#sQT').value, quietWeekend: $('#sQW').checked } }); toast('✅ Gespeichert'); } catch (err) { toast('⚠️ ' + err.message); } };
+  $('#exJ').onclick = () => download(`grand-prix-sicherung-${new Date().toISOString().slice(0, 10)}.json`, JSON.stringify(S, null, 1), 'application/json');
+  $('#exC').onclick = () => {
+    const { list } = compute(), q = v => '"' + String(v).replace(/"/g, '""') + '"';
+    const rows = [['Name', 'Initialen', 'Fahrzeug', 'Ziel', 'Termine', 'Prozent', 'Etappe', 'Letzter Termin'].map(q).join(';')]
+      .concat(list.map(x => [x.name, x.look.initials, (VEH[x.look.vehicle] || '').replace(/^\S+ /, ''), x.goal, x.count, Math.round(x.pct * 100), x.pct >= 1 ? 'Ziel' : x.pct >= .75 ? '75 %' : x.pct >= .5 ? '50 %' : x.pct >= .25 ? '25 %' : '', x.last ? new Date(x.last).toLocaleString('de-CH') : ''].map(q).join(';')));
+    download(`grand-prix-auswertung-${new Date().toISOString().slice(0, 10)}.csv`, '﻿' + rows.join('\r\n'), 'text/csv'); };
+  $('#imB').onclick = () => $('#imF').click();
+  $('#imF').onchange = async e => { const f = e.target.files[0]; e.target.value = ''; if (!f || !confirm('Den aktuellen Stand komplett durch diese Sicherung ersetzen?')) return;
+    try { await api('/api/admin/import', { method: 'POST', body: JSON.parse(await f.text()) }); toast('✅ Sicherung eingespielt'); } catch (err) { toast('⚠️ ' + err.message); } };
+  $('#rst').onclick = async () => { if (!confirm('Wirklich ALLE Termine aller Personen auf 0 setzen?') || !confirm('Sicher? Vorher eine Sicherung laden!')) return;
+    try { await api('/api/admin/reset', { method: 'POST' }); toast('Alle Zähler auf 0'); } catch (err) { toast('⚠️ ' + err.message); } };
+  $('#lf2').onchange = e => { logFilter = e.target.value; renderLog(); };
+  connect();
+}
+function download(name, text, type) { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([text], { type })); a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 2000); }
+
+let editing = false;
+function render() {
+  if (!S || !$('#rows')) return;
+  const { list, frac, daysLeft } = compute();
+  const total = list.reduce((s, x) => s + x.count, 0), goals = list.reduce((s, x) => s + x.goal, 0);
+  $('#sub').textContent = `${S.settings.title} · Ziel-Datum ${parseD(S.settings.endDate).toLocaleDateString('de-CH')}`;
+  $('#kpis').innerHTML = [[list.length, 'Teilnehmende'], [total, 'Termine total'], [goals ? Math.round(total / goals * 100) + ' %' : '–', 'Team-Fortschritt'],
+    [`${list.filter(x => x.pct >= .5).length}/${list.length}`, 'über 50 %'], [daysLeft, 'Tage bis Ziel']].map(k => `<div class="kpi"><b>${k[0]}</b><span>${k[1]}</span></div>`).join('');
+  $('#pcount').textContent = `${list.length} Personen`;
+  if (!editing) {
+    $('#rows').innerHTML = list.map(x => `<tr data-id="${x.id}">
+      <td class="c-badge"><span class="badge" style="background:${x.look.suit};color:${ink(x.look.suit)}">${esc(x.look.initials || mkIni(x.name))}</span></td>
+      <td class="c-name" data-l="Name"><input class="field f-name" value="${esc(x.name)}" maxlength="30" aria-label="Name"></td>
+      <td data-l="Initialen"><input class="field ini f-ini" value="${esc(x.look.initials || '')}" maxlength="3" style="width:70px" aria-label="Initialen"></td>
+      <td data-l="Fahrzeug"><select class="field f-veh" aria-label="Fahrzeug">${Object.entries(VEH).map(([k, v]) => `<option value="${k}"${k === x.look.vehicle ? ' selected' : ''}>${v}</option>`).join('')}</select></td>
+      <td data-l="Ziel"><input class="field f-goal" type="number" min="1" max="9999" value="${x.goal}" style="width:80px" aria-label="Ziel"></td>
+      <td data-l="Termine"><div class="cnt"><button class="btn sm f-minus" aria-label="Termin abziehen">−</button><b>${x.count}</b><button class="btn sm f-plus" aria-label="Termin hinzufügen">+</button><button class="btn sm f-set" title="Wert setzen">✎</button></div></td>
+      <td data-l="Fortschritt"><div class="muted">${Math.round(x.pct * 100)} %</div><div class="bar"><i style="width:${Math.min(100, x.pct * 100)}%"></i></div></td>
+      <td data-l="Etappe">${x.pct >= 1 ? '🏁 Ziel' : x.pct >= .75 ? '🚩 75 %' : x.pct >= .5 ? '🚩 50 %' : x.pct >= .25 ? '🚩 25 %' : '–'}</td>
+      <td data-l="Letzter Termin" class="muted">${x.last ? new Date(x.last).toLocaleString('de-CH', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '–'}</td>
+      <td class="c-act"><button class="btn sm danger f-del">Löschen</button></td></tr>`).join('') || '<tr><td colspan="10" class="muted">Noch niemand angemeldet.</td></tr>';
+    bindRows();
+  }
+  const sel = $('#lf2'), cur = sel.value;
+  sel.innerHTML = '<option value="">Alle Personen</option>' + list.map(x => `<option value="${x.id}">${esc(x.name)}</option>`).join(''); sel.value = cur;
+  if (document.activeElement && !document.activeElement.closest('#setF')) { $('#sT').value = S.settings.title; $('#sS').value = S.settings.startDate; $('#sE').value = S.settings.endDate; $('#sC').value = S.settings.accessCode || ''; $('#sL').checked = S.settings.lockGoals !== false; $('#sQF').value = S.settings.quietFrom || ''; $('#sQT').value = S.settings.quietTo || ''; $('#sQW').checked = !!S.settings.quietWeekend; }
+  renderLog();
+}
+function renderLog() {
+  const names = Object.fromEntries(S.people.map(p => [p.id, p.name]));
+  const log = S.entries.filter(e => names[e.personId] && (!logFilter || e.personId === logFilter)).slice(-300).reverse();
+  $('#log').innerHTML = log.map(e => `<tr><td class="muted" style="white-space:nowrap">${new Date(e.ts).toLocaleString('de-CH', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</td>
+    <td>${esc(names[e.personId])}</td><td class="${e.delta > 0 ? 'pos' : 'neg'}">${e.delta > 0 ? '+' : ''}${e.delta}</td>
+    <td class="muted">${e.by === 'admin' ? 'Rennleitung' : 'selbst'}</td><td style="text-align:right"><button class="btn sm danger" data-e="${e.id}" title="Eintrag löschen">✕</button></td></tr>`).join('') || '<tr><td class="muted">Noch keine Einträge.</td></tr>';
+  $('#log').querySelectorAll('[data-e]').forEach(b => b.onclick = async () => { if (!confirm('Diesen Eintrag löschen?')) return; try { await api('/api/admin/entries/' + b.dataset.e, { method: 'DELETE' }); toast('Eintrag gelöscht'); } catch (err) { toast('⚠️ ' + err.message); } });
+}
+function bindRows() {
+  document.querySelectorAll('#rows tr[data-id]').forEach(tr => {
+    const id = tr.dataset.id, patch = async body => { try { await api('/api/admin/people/' + id, { method: 'PATCH', body }); toast('✅ Gespeichert'); } catch (e) { toast('⚠️ ' + e.message); } };
+    const adj = async body => { try { await api(`/api/admin/people/${id}/adjust`, { method: 'POST', body }); } catch (e) { toast('⚠️ ' + e.message); } };
+    tr.querySelectorAll('input,select').forEach(i => { i.onfocus = () => editing = true; i.onblur = () => setTimeout(() => { editing = false; }, 150); });
+    tr.querySelector('.f-name').onchange = e => patch({ name: e.target.value });
+    tr.querySelector('.f-ini').oninput = e => { e.target.value = e.target.value.toUpperCase().replace(/[^A-ZÄÖÜ0-9]/g, '').slice(0, 3); };
+    tr.querySelector('.f-ini').onchange = e => e.target.value && patch({ look: { initials: e.target.value } });
+    tr.querySelector('.f-veh').onchange = e => patch({ look: { vehicle: e.target.value } });
+    tr.querySelector('.f-goal').onchange = e => patch({ goal: e.target.value });
+    tr.querySelector('.f-plus').onclick = () => adj({ delta: 1 });
+    tr.querySelector('.f-minus').onclick = () => adj({ delta: -1 });
+    tr.querySelector('.f-set').onclick = () => { const v = prompt('Anzahl Termine setzen auf:', tr.querySelector('.cnt b').textContent); if (v !== null && v.trim() !== '') adj({ set: parseInt(v, 10) }); };
+    tr.querySelector('.f-del').onclick = async () => { const n = tr.querySelector('.f-name').value; if (!confirm(`${n} inkl. aller Termine löschen?`)) return;
+      try { await api('/api/admin/people/' + id, { method: 'DELETE' }); toast('Gelöscht'); } catch (e) { toast('⚠️ ' + e.message); } };
+  });
+}
+function connect() {
+  if (es) es.close();
+  es = new EventSource('/api/stream?token=' + encodeURIComponent(token));
+  es.onmessage = m => { S = JSON.parse(m.data).state; if (S.settings.accessCode === undefined) { /* keine Admin-Sicht */ } render(); };
+  es.onerror = async () => { try { const r = await fetch('/api/admin/state', { headers: { Authorization: 'Bearer ' + token } }); if (r.status === 403) { es.close(); logout(true); } } catch {} };
+}
+if (token) start(); else showLogin();
+})();
+</script>
+</body>
+</html>

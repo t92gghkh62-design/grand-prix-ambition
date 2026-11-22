@@ -1,0 +1,717 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0b1a12">
+<title>Grand Prix Ambition</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏁</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Russo+One&family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+<script src="mini3d.js"></script>
+<script src="models.js"></script>
+<script src="forest.js"></script>
+<script src="extras.js"></script>
+<style>
+:root{--bg:#0b1a12;--panel:#12261b;--panel2:#183223;--line:#264a35;--text:#eef7f0;--muted:#9fbaa8;--red:#e63946;--gold:#ffd23f;--green:#06d6a0;--led:#ffb627}
+*{box-sizing:border-box;margin:0;padding:0}
+html{-webkit-text-size-adjust:100%}
+body{background:radial-gradient(900px 500px at 50% -150px,#1d4a30,var(--bg) 70%) fixed,var(--bg);color:var(--text);font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,sans-serif;font-size:15px;line-height:1.4;padding-bottom:118px;min-height:100vh}
+.disp{font-family:"Russo One","Arial Black",Impact,sans-serif;letter-spacing:.3px}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
+input{font:inherit}
+.wrap{max-width:1100px;margin:0 auto;padding:0 16px}
+.top{display:flex;align-items:center;gap:10px;padding:14px 0 8px}
+.logo{flex:1;min-width:0}
+.logo b{display:block;font-size:clamp(20px,6vw,30px);line-height:1.05;background:linear-gradient(90deg,#fff,#ffd23f);-webkit-background-clip:text;background-clip:text;color:transparent}
+.logo small{display:block;color:var(--muted);font-size:12px;font-weight:600;margin-top:4px}
+.ib{width:40px;height:40px;border-radius:12px;background:var(--panel);border:1px solid var(--line);display:grid;place-items:center;font-size:18px;flex:none}
+.tabs{position:sticky;top:0;z-index:15;background:linear-gradient(var(--bg) 75%,transparent);padding:6px 0 10px}
+.tabs .in{display:grid;grid-template-columns:repeat(3,1fr);background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:4px;gap:4px}
+.tabs button{padding:10px 2px;border-radius:10px;font-weight:800;font-size:clamp(12px,3.5vw,15px);color:var(--muted);white-space:nowrap}
+.tabs button[aria-selected=true]{background:var(--red);color:#fff;box-shadow:0 3px 0 #9c1f2a}
+section[hidden]{display:none!important}
+
+/* 3D-Welt */
+.world{position:relative;height:min(72vh,720px);min-height:420px;border-radius:20px;overflow:hidden;border:1px solid var(--line);
+  background:linear-gradient(180deg,#6fb4ea 0%,#a9d6f2 45%,#cfe6e6 70%,#cfe6e6 100%);box-shadow:0 20px 50px rgba(0,0,0,.35)}
+.world canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
+.layer{position:absolute;inset:0;pointer-events:none;overflow:hidden;z-index:2}
+.lbl{position:absolute;left:0;top:0;pointer-events:auto;display:flex;align-items:center;gap:3px;background:rgba(8,20,13,.82);border:1px solid rgba(255,255,255,.25);border-radius:999px;padding:2px 7px 2px 2px;font-size:11px;font-weight:800;color:#fff;white-space:nowrap;will-change:transform}
+.lbl b{display:grid;place-items:center;min-width:22px;height:20px;padding:0 4px;border-radius:999px;font-size:10px;letter-spacing:.3px}
+.lbl.me{background:var(--gold);color:#111;border-color:#fff;font-size:12px;box-shadow:0 0 0 3px rgba(255,210,63,.35)}
+.lbl.done span::after{content:" 🏆"}
+.sign{position:absolute;left:0;top:0;background:#c8a46b;color:#3b2611;font-weight:900;font-size:11px;padding:2px 7px;border-radius:5px;border:1px solid #7a5532;white-space:nowrap;font-family:"Russo One",Arial Black,sans-serif}
+.sign.cp{background:#fff;color:#111;border-color:var(--gold);font-size:12px;box-shadow:0 2px 10px rgba(0,0,0,.25)}
+.sign.gate{background:#111;color:#fff;border-color:#fff;font-size:12px}
+.pop{position:absolute;left:0;top:0;color:var(--gold);font-weight:900;font-size:22px;text-shadow:0 2px 0 #7a2b00,0 0 10px rgba(0,0,0,.4);font-family:"Russo One",Arial Black,sans-serif}
+.camctl{position:absolute;right:10px;top:10px;display:flex;flex-direction:column;gap:6px;z-index:5}
+.camctl button{background:rgba(8,20,13,.78);color:#fff;border:1px solid rgba(255,255,255,.25);border-radius:12px;padding:7px 10px;font-weight:800;font-size:12px;backdrop-filter:blur(4px)}
+.camctl button.on{background:var(--gold);color:#111}
+.hint3d{position:absolute;right:10px;bottom:10px;max-width:60%;text-align:right;background:rgba(8,20,13,.7);color:#e6efe8;border-radius:10px;padding:5px 9px;font-size:11px;z-index:5;pointer-events:none}
+.card{position:absolute;left:10px;top:10px;z-index:6;background:rgba(8,20,13,.92);border:1px solid rgba(255,255,255,.2);border-radius:14px;padding:10px 12px;min-width:170px;max-width:calc(100% - 120px);display:none}
+.card.show{display:block}
+.card .n{font-weight:800;font-size:15px;display:flex;gap:6px;align-items:center}
+.card .n b{display:grid;place-items:center;min-width:26px;height:22px;border-radius:999px;font-size:11px;padding:0 5px}
+.card .m{font-size:12px;color:var(--muted);margin-top:3px}
+.card .bar{height:7px;border-radius:5px;background:#203a2b;margin-top:7px;overflow:hidden}
+.card .bar i{display:block;height:100%;background:var(--gold);border-radius:5px}
+.card .x{position:absolute;right:6px;top:4px;color:var(--muted);font-size:16px}
+.nogl{position:absolute;inset:0;display:none;place-items:center;text-align:center;padding:24px;color:#111;font-weight:700}
+.legend{display:flex;flex-wrap:wrap;gap:6px 16px;justify-content:center;color:var(--muted);font-size:12px;margin:10px 0 0}
+.legend b{color:var(--text)}
+
+/* Anzeigetafel */
+.board{background:#07090d;border:6px solid #2a2f37;border-radius:18px;padding:14px 12px;box-shadow:inset 0 0 0 2px #000,0 14px 40px rgba(0,0,0,.4);position:relative;overflow:hidden}
+.board::after{content:"";position:absolute;inset:0;pointer-events:none;background:radial-gradient(circle,rgba(0,0,0,0) 0 1.1px,rgba(0,0,0,.45) 1.6px) 0 0/4px 4px}
+.led{font-family:"Courier New",ui-monospace,Menlo,monospace;font-weight:800;color:var(--led);text-shadow:0 0 6px rgba(255,182,39,.75),0 0 16px rgba(255,140,0,.35);text-transform:uppercase}
+.board h2{font-size:clamp(18px,5vw,26px);text-align:center;letter-spacing:3px}
+.kpis{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:12px 0}
+.kpi{border:1px solid #2a1c05;border-radius:10px;padding:8px 4px;text-align:center;background:#0d0a05}
+.kpi b{display:block;font-size:clamp(26px,8vw,40px);line-height:1}
+.kpi span{font-size:10px;letter-spacing:1px;opacity:.85}
+.rows{width:100%;border-collapse:collapse;font-size:clamp(12px,3.4vw,16px)}
+.rows th{font-size:10px;letter-spacing:1px;text-align:right;padding:4px;opacity:.75}
+.rows td{padding:6px 4px;border-top:1px dashed #2a1c05;text-align:right;white-space:nowrap}
+.rows td.n,.rows th.n{text-align:left;max-width:130px;overflow:hidden;text-overflow:ellipsis}
+.rows tr.me td{color:#fff2b8}
+.rows td:last-child{font-size:1.25em;letter-spacing:3px}
+.rows .grn{color:#7dffb0;text-shadow:0 0 6px rgba(80,255,150,.6)}
+.rows .rd{color:#ff6b6b;text-shadow:0 0 6px rgba(255,80,80,.6)}
+.ticker{margin-top:12px;border-top:1px solid #2a1c05;padding-top:8px;overflow:hidden;white-space:nowrap;font-size:13px}
+.ticker div{display:inline-block;padding-left:100%;animation:tick 28s linear infinite}
+@keyframes tick{to{transform:translateX(-100%)}}
+.mvp{margin-top:12px;text-align:center;font-size:13px}
+
+/* Garage */
+.garage{display:grid;gap:14px}
+@media (min-width:860px){.garage{grid-template-columns:1fr 1fr;align-items:start}}
+.stage{background:radial-gradient(400px 220px at 50% 30%,#2c4f7a,#0f1a2c 75%);border:1px solid var(--line);border-radius:20px;padding:10px}
+@media (min-width:860px){.stage{position:sticky;top:64px;z-index:5}}
+.stage canvas{width:100%;height:230px;display:block}
+@media (min-width:860px){.stage canvas{height:340px}}
+.stage .nm{text-align:center;font-size:20px;display:flex;justify-content:center;align-items:center;gap:8px}
+.stage .nm b{display:grid;place-items:center;min-width:34px;height:28px;border-radius:999px;font-size:13px;padding:0 6px}
+.saved{font-size:12px;color:var(--green);min-height:16px;text-align:center;margin-top:2px}
+.opt{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:12px}
+.opt h3{font-size:12px;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);margin-bottom:8px;display:flex;justify-content:space-between;align-items:center}
+.chips{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}
+@media (min-width:480px){.chips{grid-template-columns:repeat(3,1fr)}}
+.chips.small{grid-template-columns:repeat(4,1fr)}
+.chip{background:var(--panel2);border:2px solid transparent;border-radius:12px;padding:4px 4px 6px;text-align:center;font-size:11px;font-weight:700;color:var(--muted)}
+.chip img{width:100%;aspect-ratio:150/110;display:block;object-fit:contain}
+.chip .e{font-size:24px;display:block;margin:4px 0 2px}
+.chip[aria-pressed=true]{border-color:var(--gold);color:var(--text);background:#22432f}
+.sw{display:flex;flex-wrap:wrap;gap:8px}
+.sw button{width:36px;height:36px;border-radius:50%;border:3px solid rgba(255,255,255,.15)}
+.sw button[aria-pressed=true]{border-color:var(--gold);box-shadow:0 0 0 2px var(--bg),0 0 0 4px var(--gold)}
+.field{width:100%;padding:11px 12px;border-radius:12px;border:1px solid var(--line);background:var(--bg);color:var(--text);font-size:16px}
+.ini{text-transform:uppercase;letter-spacing:2px;font-weight:800}
+.two{display:grid;grid-template-columns:2fr 1fr;gap:8px}
+label{display:block;font-size:12px;font-weight:700;color:var(--muted);margin:8px 0 4px;text-transform:uppercase;letter-spacing:.4px}
+.btn{padding:12px;border-radius:12px;background:var(--panel2);border:1px solid var(--line);font-weight:800;width:100%}
+.btn.pri{background:var(--green);border-color:var(--green);color:#062b20}
+.btn.danger{background:#3a1715;border-color:#6b2420;color:#ffb4ae}
+.row{display:flex;gap:8px;margin-top:12px}
+.hint{font-size:12px;color:var(--gold);margin-top:6px;min-height:16px}
+
+/* Dock */
+.dock{position:fixed;left:0;right:0;bottom:0;z-index:20;padding:10px 16px calc(10px + env(safe-area-inset-bottom));background:linear-gradient(180deg,rgba(11,26,18,0),rgba(11,26,18,.97) 30%)}
+.dock .in{max-width:1100px;margin:0 auto;display:flex;gap:10px;align-items:center}
+.me-card{flex:1;min-width:0;display:flex;align-items:center;gap:8px;background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:7px 10px;text-align:left}
+.badge{display:grid;place-items:center;min-width:36px;height:36px;border-radius:50%;font-weight:900;font-size:13px;flex:none;border:2px solid rgba(255,255,255,.4)}
+.me-card .t{min-width:0;line-height:1.15}
+.me-card .t b{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.me-card .t span{font-size:12px;color:var(--muted)}
+.go{height:62px;padding:0 18px;border-radius:18px;background:var(--red);color:#fff;font-size:21px;box-shadow:0 6px 0 #9c1f2a,0 10px 24px rgba(0,0,0,.4);white-space:nowrap;transition:transform .08s,box-shadow .08s}
+.go:active{transform:translateY(5px);box-shadow:0 1px 0 #9c1f2a}
+.undo{width:44px;height:62px;border-radius:16px;background:var(--panel);border:1px solid var(--line);font-size:20px;color:var(--muted);flex:none}
+.join{flex:1;height:58px;border-radius:18px;background:var(--green);color:#062b20;font-weight:800;font-size:17px;box-shadow:0 5px 0 #048a67}
+
+dialog{border:1px solid var(--line);border-radius:20px;background:var(--panel);color:var(--text);padding:20px;width:min(440px,calc(100vw - 32px));margin:auto}
+dialog::backdrop{background:rgba(0,0,0,.65)}
+dialog h3{font-size:24px;margin-bottom:4px}
+dialog p{color:var(--muted);font-size:13px;margin-bottom:10px}
+.pick{display:flex;flex-direction:column;gap:6px;max-height:36vh;overflow:auto}
+.pick button{display:flex;align-items:center;gap:10px;text-align:left;padding:6px 10px;border-radius:12px;background:var(--panel2);border:1px solid var(--line);font-weight:700}
+.pick .badge{min-width:30px;height:30px;font-size:11px}
+.adminlist{display:flex;flex-direction:column;gap:8px;max-height:36vh;overflow:auto}
+.adminlist .ar{display:grid;grid-template-columns:1fr 70px 38px;gap:6px}
+.adminlist input{padding:8px;font-size:14px}
+.adminlist button{border-radius:10px;background:#3a1715;color:#ffb4ae}
+.toast{position:fixed;left:50%;top:12px;transform:translate(-50%,-150%);background:#fff;color:#111;font-weight:800;padding:10px 16px;border-radius:999px;z-index:50;transition:transform .35s;max-width:calc(100vw - 32px);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;box-shadow:0 8px 24px rgba(0,0,0,.4)}
+.toast.show{transform:translate(-50%,0)}
+.big{position:fixed;inset:0;display:none;place-items:center;z-index:60;background:rgba(0,0,0,.6);text-align:center;padding:20px}
+.big.show{display:grid}
+.big .t{font-size:clamp(48px,14vw,110px);color:var(--gold);line-height:.95;animation:pop .6s cubic-bezier(.2,1.6,.4,1)}
+.big .flag{height:22px;width:220px;margin:12px auto 0;background:conic-gradient(#111 25%,#fff 0 50%,#111 0 75%,#fff 0) 0 0/22px 22px;border-radius:4px}
+.big .s{font-size:18px;font-weight:700;margin-top:12px}
+@keyframes pop{from{transform:scale(.3);opacity:0}to{transform:scale(1);opacity:1}}
+canvas#fx{position:fixed;inset:0;pointer-events:none;z-index:70}
+.offline{position:fixed;top:0;left:0;right:0;background:#6b2420;color:#fff;font-size:12px;text-align:center;padding:4px;z-index:80;display:none}
+
+/* ---------- Responsiv ---------- */
+.ib{text-decoration:none;color:inherit}
+.tabs .sh{display:none}
+@media (max-width:400px){.tabs .lg{display:none}.tabs .sh{display:inline}}
+.world{height:clamp(320px,calc(100svh - 250px),780px);min-height:0}
+@media (min-width:1400px){.wrap,.dock .in{max-width:1320px}}
+@media (min-width:1800px){.wrap,.dock .in{max-width:1560px}.world{height:clamp(320px,calc(100svh - 260px),980px)}}
+/* Ultrawide / Curved Screen: Wald in der Mitte, Anzeigetafel als Spalte daneben */
+@media (min-width:2200px){
+  .wrap,.dock .in{max-width:2240px}
+  .duo{display:grid;grid-template-columns:minmax(0,1fr) clamp(520px,24vw,640px);gap:20px;align-items:start}
+  .world{height:clamp(320px,calc(100svh - 330px),980px)}   /* Platz für Ticker und untere Leiste */
+  .duo>#board{position:sticky;top:12px}
+  .duo>#board .board{padding:16px 14px}
+  .duo>#board .ticker{display:none}
+  .duo>#board .rows td.n,.duo>#board .rows th.n{max-width:220px}
+  .tabs button[data-tab=board]{display:none}
+}
+/* sehr schmale Handys */
+@media (max-width:360px){
+  .wrap{padding:0 10px}
+  .go{font-size:17px;padding:0 12px;height:56px}
+  .undo{width:38px;height:56px}
+  .me-card .badge{display:none}
+  .kpi span{font-size:9px;letter-spacing:.5px}
+  .rows td,.rows th{padding:5px 2px}
+  .lbl{font-size:10px}
+}
+/* Handy quer / niedrige Bildschirme */
+@media (max-height:520px) and (orientation:landscape){
+  body{padding-bottom:84px}
+  .top{padding:6px 0 4px}
+  .logo b{font-size:18px}
+  .logo small{display:none}
+  .ib{width:34px;height:34px;font-size:15px}
+  .tabs{padding:2px 0 6px}
+  .tabs button{padding:6px 2px}
+  .world{height:calc(100svh - 150px);min-height:220px;border-radius:14px}
+  .legend{display:none}
+  .camctl{flex-direction:row}
+  .camctl button{padding:5px 8px;font-size:11px}
+  .dock{padding:6px 16px calc(6px + env(safe-area-inset-bottom))}
+  .go{height:50px;font-size:18px}
+  .undo{height:50px}
+  .me-card{padding:4px 10px}
+  .stage canvas{height:170px}
+  .garage{grid-template-columns:1fr 1fr}
+  .stage{position:sticky;top:50px}
+}
+/* Tablets */
+@media (min-width:600px) and (max-width:1023px){
+  .chips{grid-template-columns:repeat(3,1fr)}
+  .chips.small{grid-template-columns:repeat(4,1fr)}
+}
+@media (min-width:1024px){.chips{grid-template-columns:repeat(4,1fr)}.chips.small{grid-template-columns:repeat(4,1fr)}}
+/* Anzeigetafel auf schmalen Geräten scrollbar */
+.board{overflow-x:auto}
+@media (max-width:400px){.rows th:nth-child(4),.rows td:nth-child(4){display:none}}
+dialog{max-height:calc(100svh - 24px);overflow:auto}
+
+/* Uhr & Sonnenstand */
+.clock{position:absolute;left:10px;bottom:10px;z-index:5;display:flex;flex-direction:column;gap:1px;background:rgba(8,20,13,.78);color:#eef7f0;border:1px solid rgba(255,255,255,.2);border-radius:14px;padding:7px 11px;text-align:left;backdrop-filter:blur(4px);font-size:11px;line-height:1.3;max-width:calc(100% - 20px)}
+.clock b{font-size:20px;font-family:"Russo One","Arial Black",sans-serif;letter-spacing:.5px;font-variant-numeric:tabular-nums}
+.clock span{color:#c9dccf;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.clock i{font-style:normal;color:var(--gold);font-weight:800}
+.clock b em{font-style:normal;font-family:Inter,system-ui,sans-serif;font-size:14px;font-weight:800;margin-left:6px;color:#ffe08a}
+.clock .est{font-size:10px;opacity:.7}
+.world::before{content:"";position:absolute;inset:0;opacity:0;transition:opacity 2s;pointer-events:none;
+  background:radial-gradient(1.2px 1.2px at 12% 8%,#fff,transparent),radial-gradient(1px 1px at 28% 14%,#fff,transparent),radial-gradient(1.4px 1.4px at 46% 6%,#fff,transparent),radial-gradient(1px 1px at 63% 12%,#fff,transparent),radial-gradient(1.3px 1.3px at 78% 5%,#fff,transparent),radial-gradient(1px 1px at 90% 16%,#fff,transparent),radial-gradient(1px 1px at 36% 22%,#dfe8ff,transparent),radial-gradient(1.2px 1.2px at 70% 24%,#dfe8ff,transparent)}
+.world.night::before{opacity:1}
+.world::after{content:"";position:absolute;right:16%;top:7%;width:34px;height:34px;border-radius:50%;background:radial-gradient(circle at 38% 38%,#fffbe6,#e9e3c8 60%,#cfc8a8);box-shadow:0 0 30px 8px rgba(255,250,220,.35);opacity:var(--moon,0);transition:opacity 2s;pointer-events:none}
+@media (max-height:520px) and (orientation:landscape){.clock{padding:4px 8px}.clock b{font-size:15px}.clock span:last-of-type{display:none}}
+
+.chips{grid-template-columns:repeat(2,minmax(0,1fr))!important}
+@media (min-width:480px){.chips{grid-template-columns:repeat(3,minmax(0,1fr))!important}}
+@media (min-width:1024px){.chips{grid-template-columns:repeat(4,minmax(0,1fr))!important}}
+.chips.small{grid-template-columns:repeat(4,minmax(0,1fr))!important}
+.chip div{overflow-wrap:anywhere;hyphens:auto;line-height:1.2}
+.chip img.sq{width:100%;aspect-ratio:1/1;border-radius:9px;background:radial-gradient(circle at 50% 40%,#2c4f7a,#16243a)}
+.card .follow{margin-top:8px;width:100%;padding:7px;border-radius:10px;background:var(--gold);color:#111;font-weight:800;font-size:12px}
+.shot{position:absolute;left:50%;top:12px;transform:translate(-50%,-8px);background:rgba(8,20,13,.82);color:#fff;border:1px solid rgba(255,255,255,.25);border-radius:999px;padding:5px 12px;font-weight:800;font-size:12px;opacity:0;transition:opacity .5s,transform .5s;white-space:nowrap;pointer-events:none;z-index:4;max-width:calc(100% - 200px);overflow:hidden;text-overflow:ellipsis}
+.shot.show{opacity:1;transform:translate(-50%,0)}
+@media (max-width:520px){.shot{top:auto;bottom:86px;max-width:calc(100% - 20px)}}
+.sleep{position:fixed;inset:0;z-index:90;display:none;place-items:center;text-align:center;padding:24px;background:radial-gradient(600px 400px at 50% 30%,#1b2a4a,#070b14)}
+.sleep.show{display:grid}
+.sleep .moon{font-size:64px}
+.sleep h3{font-size:28px;margin:8px 0}
+.sleep p{color:var(--muted);max-width:420px;margin:0 auto 16px}
+.field:disabled{opacity:.6}
+/* Live-Ticker */
+.newsbar{display:flex;align-items:stretch;gap:0;margin-top:8px;background:#0b130e;border:1px solid #23402d;border-radius:12px;overflow:hidden;min-height:38px}
+.newsbar .live{flex:none;display:flex;align-items:center;gap:6px;padding:0 12px;background:#c1121f;color:#fff;font-weight:900;font-size:12px;letter-spacing:.08em}
+.newsbar .live i{width:8px;height:8px;border-radius:50%;background:#fff;animation:blink 1.2s infinite}
+@keyframes blink{50%{opacity:.25}}
+.newsbar .track{flex:1;overflow:hidden;position:relative;mask-image:linear-gradient(90deg,transparent,#000 24px,#000 calc(100% - 24px),transparent)}
+.newsbar .run{display:inline-flex;gap:34px;white-space:nowrap;padding:10px 0 10px 24px;animation:newsrun var(--dur,60s) linear infinite;will-change:transform}
+.newsbar:hover .run{animation-play-state:paused}
+.newsbar .it{font-size:13px;color:#dfe9e2}
+.newsbar .it b{color:#fff}
+.newsbar .it time{color:#7f9a88;font-size:11px;margin-right:6px;font-variant-numeric:tabular-nums}
+.newsbar .it.new{color:var(--gold)}
+.newsbar .it.new b{color:var(--gold)}
+@keyframes newsrun{from{transform:translateX(0)}to{transform:translateX(-50%)}}
+@media (prefers-reduced-motion:reduce){.newsbar .run{animation:none;display:block;white-space:normal}.newsbar .it:nth-child(n+3){display:none}}
+/* Belohnungen in der Garage */
+.rew{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+.rw{position:relative;background:var(--panel2);border:2px solid transparent;border-radius:12px;padding:8px 6px;text-align:center;font-size:11px;color:var(--muted);font-weight:700}
+.rw .e{font-size:26px;display:block;line-height:1.2}
+.rw b{display:block;color:var(--text);font-size:12px;margin:2px 0}
+.rw.lock{opacity:.55;filter:grayscale(.8)}
+.rw.on{border-color:var(--gold);background:#22432f}
+.rw button{margin-top:6px;width:100%;border-radius:8px;padding:5px 2px;font-weight:800;font-size:11px;background:var(--gold);color:#111}
+.rw.on button{background:transparent;color:var(--gold);border:1px solid var(--gold)}
+.rw .bar{height:4px;border-radius:2px;background:#0d1a12;margin-top:6px;overflow:hidden}.rw .bar i{display:block;height:100%;background:var(--gold)}
+.chip.locked{opacity:.45;cursor:not-allowed;position:relative}
+.chip.locked::after{content:'🔒';position:absolute;top:4px;right:6px;font-size:13px}
+@media (max-width:560px){.rew{grid-template-columns:repeat(2,minmax(0,1fr))}}
+</style>
+</head>
+<body>
+<div class="offline" id="offline">Verbindung unterbrochen – verbinde neu …</div>
+<div class="wrap">
+  <div class="top">
+    <div class="logo"><b class="disp" id="title">GRAND PRIX AMBITION</b><small id="subtitle"></small></div>
+    <button class="ib" id="soundBtn" title="Ton an/aus">🔊</button>
+    <a class="ib" href="/admin" title="Rennleitung (Backend)" aria-label="Rennleitung">⚙️</a>
+  </div>
+  <nav class="tabs"><div class="in" role="tablist">
+    <button role="tab" data-tab="race" aria-selected="true">🌲 <span class="lg">Waldrennen</span><span class="sh">Rennen</span></button>
+    <button role="tab" data-tab="board" aria-selected="false">📟 <span class="lg">Anzeigetafel</span><span class="sh">Tafel</span></button>
+    <button role="tab" data-tab="garage" aria-selected="false">🔧 Garage</button>
+  </div></nav>
+
+  <div class="duo">
+  <section id="race">
+    <div class="world" id="world">
+      <canvas id="c3d"></canvas>
+      <div class="layer" id="layer"></div>
+      <div class="camctl"><button id="camAll" class="on">🎥 Übersicht</button><button id="camMe">📍 Mein Fahrzeug</button><button id="camTour">🎬 Kamerafahrt</button></div>
+      <div class="card" id="card"></div>
+      <button class="clock" id="clock" title="Tippen für Zeitraffer (24 h in 1 Minute)" aria-label="Uhr und Sonnenstand Bern"></button>
+      <div class="hint3d" id="hint3d">Ziehen = drehen · Rechtsklick/Shift+Ziehen = verschieben · Mausrad = zoomen · W A S D = fliegen · Q/E = drehen · Klick auf Tier = verfolgen · Doppelklick = Übersicht · Uhr = Zeitraffer</div>
+      <div class="nogl" id="nogl">3D wird auf diesem Gerät nicht unterstützt.<br>Die Zahlen stehen auf der Anzeigetafel.</div>
+    </div>
+    <div class="newsbar" id="newsbar" aria-live="polite"><div class="live"><i></i>LIVE</div><div class="track"><div class="run" id="tickRun"></div></div></div>
+    <div class="legend"><span>🏁 Ziel = <b>100 %</b> deines Ambitionsniveaus</span><span>🚩 Zwischenziele bei <b>25 %</b>, <b>50 %</b> und <b>75 %</b></span><span>Absolute Zahlen → Anzeigetafel</span></div>
+  </section>
+
+  <section id="board" hidden>
+    <div class="board led">
+      <h2>★ ANZEIGETAFEL ★</h2>
+      <div class="kpis">
+        <div class="kpi"><b id="kTotal">0</b><span>TERMINE TEAM</span></div>
+        <div class="kpi"><b id="kWeek">0</b><span>DIESE WOCHE</span></div>
+        <div class="kpi"><b id="kDays">0</b><span>TAGE BIS ZIEL</span></div>
+      </div>
+      <table class="rows"><thead><tr><th>P</th><th class="n">NAME</th><th>TERM.</th><th>ZIEL</th><th>%</th><th>ETAPPE</th></tr></thead><tbody id="rows"></tbody></table>
+      <div class="mvp" id="mvp"></div>
+      <div class="ticker"><div id="ticker"></div></div>
+    </div>
+  </section>
+  </div>
+
+  <section id="garage" hidden>
+    <div class="garage">
+      <div class="stage" id="stageBox"><canvas id="cStage"></canvas><div class="nm disp" id="gNm"></div><div class="saved" id="gSaved"></div></div>
+      <div id="gOpts" style="display:grid;gap:12px"></div>
+    </div>
+  </section>
+</div>
+
+<div class="dock"><div class="in" id="dock"></div></div>
+
+<dialog id="dJoin">
+  <h3 class="disp">Ab an die Startlinie</h3>
+  <p>Wähle deinen Namen – oder steig neu ins Rennen ein.</p>
+  <div class="pick" id="pickList"></div>
+  <div class="two"><div><label for="jName">Neu: Name</label><input class="field" id="jName" maxlength="30" autocomplete="off" placeholder="z. B. Sandra Keller"></div>
+  <div><label for="jIni">Initialen</label><input class="field ini" id="jIni" maxlength="3" autocomplete="off" placeholder="SK"></div></div>
+  <label for="jGoal">Dein Ambitionsniveau: Termine bis <span id="jEnd"></span></label>
+  <input class="field" id="jGoal" type="number" min="1" max="9999" inputmode="numeric" placeholder="z. B. 40">
+  <div class="hint" id="jHint"></div>
+  <div class="hint" id="jLock" style="color:var(--gold)">🔒 Gut überlegen: Nach dem Einsteigen ist dein Ambitionsniveau fix. Ändern kann es nur noch die Rennleitung.</div>
+  <div class="row"><button class="btn" data-close>Später</button><button class="btn pri" id="jOk">Einsteigen</button></div>
+</dialog>
+
+<dialog id="dCode">
+  <h3 class="disp">Zugangscode</h3>
+  <p>Diese Seite ist fürs Team reserviert.</p>
+  <input class="field" id="cCode" autocomplete="off">
+  <div class="hint" id="cHint"></div>
+  <div class="row"><button class="btn pri" id="cOk">Los</button></div>
+</dialog>
+
+
+
+<div class="sleep" id="sleep"><div><div class="moon">🌙</div><h3 class="disp">Der Wald schläft</h3><p id="sleepTxt"></p><button class="btn pri" id="sleepWake" style="width:auto;padding:10px 18px">Trotzdem kurz öffnen</button></div></div>
+<div class="toast" id="toast"></div>
+<div class="big" id="big"><div><div class="t disp" id="bigT">ZIEL!</div><div class="flag"></div><div class="s" id="bigS"></div></div></div>
+<canvas id="fx"></canvas>
+
+<script>
+(() => {
+'use strict';
+const $ = s => document.querySelector(s);
+const ls = { get(k){ try { return localStorage.getItem(k); } catch { return null; } }, set(k,v){ try { localStorage.setItem(k,v); } catch {} } };
+const DAY = 864e5, Mo = window.Models;
+let S = null, meId = ls.get('gp_me'), code = ls.get('gp_code') || '', sound = ls.get('gp_sound') !== 'off', tab = ls.get('gp_tab') || 'race';
+const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const parseD = s => { const [y,m,d] = s.split('-').map(Number); return new Date(y, m-1, d); };
+const mkIni = n => String(n || '').split(/\s+/).map(w => w[0] || '').join('').slice(0, 3).toUpperCase();
+const ink = c => { const n = parseInt((c || '#3a86ff').slice(1), 16), r = n >> 16, g = (n >> 8) & 255, b = n & 255; return (r*299 + g*587 + b*114) / 1000 > 150 ? '#111' : '#fff'; };
+const badge = (look, name, cls = 'badge') => `<span class="${cls}" style="background:${look.suit};color:${ink(look.suit)}">${esc(look.initials || mkIni(name))}</span>`;
+function weekStart(t){ const d = new Date(t); d.setHours(0,0,0,0); d.setDate(d.getDate() - ((d.getDay()+6)%7)); return d.getTime(); }
+
+async function api(path, opt = {}) {
+  const headers = { 'Content-Type': 'application/json' };
+  if (code) headers['x-access-code'] = code;
+  const r = await fetch(path, { method: opt.method || 'GET', headers, body: opt.body ? JSON.stringify(opt.body) : undefined });
+  const j = await r.json().catch(() => ({}));
+  if (r.status === 401) { askCode(); throw new Error('Zugangscode nötig'); }
+  if (!r.ok) throw new Error(j.error || 'Fehler');
+  return j;
+}
+
+// ---------- Rechnen ----------
+const CPS = [.25, .5, .75];
+const cpMarks = n => CPS.map((c, i) => i < n ? '■' : '□').join('');
+const nextTxt = x => x.next ? (x.next === 1 ? `noch ${x.toNext} bis 🏁 Ziel` : `noch ${x.toNext} bis 🚩 ${Math.round(x.next * 100)} %`) : '🏆 im Ziel';
+function pace() {
+  const st = parseD(S.settings.startDate), en = parseD(S.settings.endDate); en.setHours(23,59,59);
+  const now = Date.now();
+  return { frac: Math.max(0, Math.min(1, (now - st) / (en - st))), daysLeft: Math.max(0, Math.ceil((en - now) / DAY)) };
+}
+function compute() {
+  const p = pace(), wk = weekStart(Date.now()), by = {};
+  S.people.forEach(pe => by[pe.id] = { ...pe, look: { ...Mo.DEFAULT, initials: mkIni(pe.name), ...pe.look }, count: 0, week: 0 });
+  for (const e of S.entries) { const x = by[e.personId]; if (!x) continue; x.count += e.delta; if (new Date(e.ts).getTime() >= wk) x.week += e.delta; }
+  const list = Object.values(by);
+  for (const x of list) { x.pct = x.count / x.goal; x.cps = CPS.filter(c => x.pct >= c).length;
+    const nc = CPS.find(c => x.pct < c) || (x.pct < 1 ? 1 : null); x.next = nc; x.toNext = nc ? Math.ceil(nc * x.goal - x.count - 1e-9) : 0; }
+  const ranked = [...list].sort((a, b) => b.pct - a.pct || b.count - a.count || a.name.localeCompare(b.name));
+  ranked.forEach((x, i) => x.rank = i + 1);
+  return { list, ranked, p };
+}
+
+// ---------- Live-Ticker: erzählt das Rennen aus der Termin-Historie ----------
+const REW = Mo.REWARDS || [];
+function tickerItems() {
+  const ppl = {}, out = [], dayCount = {};
+  S.people.forEach(p => ppl[p.id] = { name: p.name, goal: p.goal || 1, n: 0 });
+  for (const p of S.people) if (p.createdAt) out.push({ ts: p.createdAt, html: `🏁 <b>${esc(p.name)}</b> steht an der Startlinie`, i: out.length });
+  const pct = x => x.n / x.goal, ranking = () => Object.entries(ppl).sort((a, b) => pct(b[1]) - pct(a[1]) || b[1].n - a[1].n);
+  let team = 0;
+  const ents = [...S.entries].sort((a, b) => a.ts < b.ts ? -1 : 1);
+  for (const e of ents) { const x = ppl[e.personId]; if (!x) continue;
+    const before = pct(x), oldRank = ranking().findIndex(r => r[0] === e.personId);
+    x.n = Math.max(0, x.n + e.delta); team += e.delta; const after = pct(x);
+    if (e.delta <= 0) continue;
+    const day = e.ts.slice(0, 10); dayCount[day] = (dayCount[day] || 0) + e.delta;
+    const h = +new Date(e.ts).toLocaleTimeString('de-CH', { hour: '2-digit', hourCycle: 'h23', timeZone: 'Europe/Zurich' });
+    const msgs = [];
+    if (before < 1 && after >= 1) msgs.push(`🏆 <b>${esc(x.name)}</b> fährt durchs Zieltor – Ambitionsniveau erreicht!`);
+    else { const cp = CPS.filter(c => before < c && after >= c).pop(); if (cp) msgs.push(`🚩 <b>${esc(x.name)}</b> knackt die ${Math.round(cp * 100)} %-Etappe`); }
+    for (const r of REW) if (before < r.at && after >= r.at) msgs.push(`🎁 <b>${esc(x.name)}</b> schaltet ${r.emoji} ${r.name} frei`);
+    const nr = ranking(), newRank = nr.findIndex(r => r[0] === e.personId);
+    if (newRank < oldRank) { const passed = nr[newRank + 1]; if (passed && passed[1].n > 0) msgs.push(newRank === 0 ? `👑 <b>${esc(x.name)}</b> übernimmt die Führung vor ${esc(passed[1].name)}` : `⚡ <b>${esc(x.name)}</b> überholt ${esc(passed[1].name)} – jetzt Platz ${newRank + 1}`); }
+    if (dayCount[day] === e.delta) msgs.push(`☀️ <b>${esc(x.name)}</b> eröffnet den Tag mit dem ersten Termin`);
+    if (!msgs.length) msgs.push(h < 8 ? `🌅 Früh unterwegs: <b>${esc(x.name)}</b> +${e.delta} (${Math.round(after * 100)} %)` : `🏎️ <b>${esc(x.name)}</b> +${e.delta} Termin${e.delta > 1 ? 'e' : ''} – jetzt ${Math.round(after * 100)} %`);
+    if (Math.floor((team - e.delta) / 25) < Math.floor(team / 25)) msgs.push(`🎉 Das Team knackt die Marke von <b>${Math.floor(team / 25) * 25}</b> Terminen`);
+    if ([10, 15, 20, 30].includes(dayCount[day]) && dayCount[day] - e.delta < dayCount[day]) msgs.push(`🔥 Heute schon <b>${dayCount[day]}</b> Termine im Team`);
+    msgs.forEach(m => out.push({ ts: e.ts, html: m, i: out.length }));
+  }
+  return out.sort((a, b) => a.ts < b.ts ? 1 : a.ts > b.ts ? -1 : (a.i || 0) - (b.i || 0)).slice(0, 14);
+}
+let tickSig = '', tickSeen = new Set();
+function renderTicker() {
+  if (!S) return;
+  const items = tickerItems(), sig = items.map(i => i.ts + i.html).join('|');
+  if (sig === tickSig) return; tickSig = sig;
+  const first = !tickSeen.size, fmt = ts => { const d = new Date(ts), today = new Date().toDateString() === d.toDateString();
+    return (today ? '' : d.toLocaleDateString('de-CH', { day: 'numeric', month: 'numeric', timeZone: 'Europe/Zurich' }) + ' ') + d.toLocaleTimeString('de-CH', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Zurich' }); };
+  const html = items.length ? items.map(i => { const k = i.ts + i.html, isNew = !first && !tickSeen.has(k); tickSeen.add(k);
+    return `<span class="it${isNew ? ' new' : ''}"><time>${fmt(i.ts)}</time>${i.html}</span>`; }).join('') : '<span class="it">Noch keine Termine – wer macht den ersten? 🏁</span>';
+  const run = $('#tickRun'); run.innerHTML = html + html;              // doppelt für die Endlos-Schleife
+  run.style.setProperty('--dur', Math.max(25, run.scrollWidth / 2 / 60) + 's');
+  run.style.animation = 'none'; void run.offsetWidth; run.style.animation = '';
+}
+
+// ---------- 3D-Welt ----------
+let forest = null, selected = null;
+try {
+  forest = new Forest($('#c3d'), $('#layer'), { clockEl: $('#clock'), onCam: w => camBtns(w), onSelect: id => { selected = id; renderCard(); } });
+  window.__forest = forest;
+  $('#clock').onclick = () => toast(forest.toggleTimelapse() ? '⏩ Zeitraffer: ein ganzer Tag in einer Minute' : '🕐 Zurück zur echten Zeit in Bern');
+} catch (e) { console.warn(e); $('#nogl').style.display = 'grid'; $('.camctl').style.display = 'none'; $('#hint3d').style.display = 'none'; $('#clock').style.display = 'none'; }
+$('#camAll').onclick = () => { forest && forest.overview(); camBtns('all'); };
+$('#camMe').onclick = () => { if (!meId) { openJoin(); return; } forest && forest.follow(meId); camBtns('me'); };
+$('#camTour').onclick = () => { forest && forest.startTour(); camBtns('tour'); };
+function camBtns(w) { $('#camAll').classList.toggle('on', w === 'all'); $('#camMe').classList.toggle('on', w === 'me'); $('#camTour').classList.toggle('on', w === 'tour'); }
+setTimeout(() => $('#hint3d').style.display = 'none', 16000);
+function renderCard() {
+  const c = $('#card'); if (!selected || !S) { c.classList.remove('show'); return; }
+  const { list } = compute(); const x = list.find(y => y.id === selected); if (!x) { c.classList.remove('show'); return; }
+  const v = Mo.VEHICLES.find(v => v.key === x.look.vehicle);
+  c.innerHTML = `<button class="x" id="cardX" aria-label="Schliessen">✕</button><div class="n">${badge(x.look, x.name, '')}${esc(x.name)}</div>
+    <div class="m">${v ? v.emoji + ' ' + v.name : ''}</div>
+    <div class="m"><b style="color:#fff">${x.count}</b> von ${x.goal} Terminen · ${Math.round(x.pct * 100)} %</div>
+    <div class="m">${nextTxt(x)}</div>
+    <div class="bar"><i style="width:${Math.min(100, x.pct * 100)}%"></i></div>
+    <button class="follow" id="cardF">📍 Folgen</button>`;
+  c.querySelector('.n span').style.cssText += ';min-width:26px;height:22px;border-radius:999px;display:grid;place-items:center;font-size:11px;padding:0 5px';
+  c.classList.add('show'); $('#cardX').onclick = () => { selected = null; renderCard(); };
+  $('#cardF').onclick = () => { forest && forest.follow(x.id); camBtns(x.id === meId ? 'me' : 'none'); };
+}
+
+// ---------- Rendern ----------
+function render() {
+  try { renderTicker(); } catch (e) { console.warn(e); }
+  if (!S) return;
+  const { list, ranked, p } = compute();
+  document.title = S.settings.title;
+  $('#title').textContent = S.settings.title.toUpperCase();
+  $('#subtitle').textContent = `Ziel-Datum ${parseD(S.settings.endDate).toLocaleDateString('de-CH')} · noch ${p.daysLeft} Tage`;
+  if (forest) forest.setRacers(list, meId);
+  renderBoard(ranked, p); renderCard();
+  if (tab === 'garage') renderGarage(false);
+  renderDock(list);
+}
+function renderBoard(ranked, p) {
+  const total = ranked.reduce((s, x) => s + x.count, 0), week = ranked.reduce((s, x) => s + x.week, 0);
+  $('#kTotal').textContent = total; $('#kWeek').textContent = week; $('#kDays').textContent = p.daysLeft;
+  $('#rows').innerHTML = ranked.length ? ranked.map(x => `<tr class="${x.id === meId ? 'me' : ''}"><td>${x.rank}</td><td class="n">${esc(x.look.initials)} ${esc(x.name)}</td><td>${x.count}</td><td>${x.goal}</td><td>${Math.round(x.pct * 100)}</td><td class="${x.cps ? 'grn' : ''}">${cpMarks(x.cps)}</td></tr>`).join('')
+    : '<tr><td colspan="6" style="text-align:center">NOCH KEINE FAHRER</td></tr>';
+  const best = [...ranked].sort((a, b) => b.week - a.week)[0];
+  $('#mvp').textContent = best && best.week > 0 ? `★ SCHNELLSTE RUNDE DER WOCHE: ${best.name} (${best.week}) ★` : '';
+  const names = Object.fromEntries(S.people.map(x => [x.id, x.name]));
+  const feed = S.entries.filter(e => e.delta > 0 && names[e.personId]).slice(-10).reverse();
+  $('#ticker').textContent = (() => { const it = tickerItems().slice(0, 10).map(i => i.html.replace(/<[^>]+>/g, '')); return it.length ? it.join('   ◆   ') : 'BOXENGASSE OFFEN – ERSTER TERMIN GESUCHT'; })();
+}
+function renderDock(list) {
+  const me = list.find(x => x.id === meId), d = $('#dock');
+  if (!me) { d.innerHTML = '<button class="join" id="joinBtn">🏁 Einsteigen / Ich bin …</button>'; $('#joinBtn').onclick = openJoin; return; }
+  d.innerHTML = `<button class="undo" id="undoBtn" title="Letzten Termin korrigieren">↶</button>
+    <button class="me-card" id="meCard">${badge(me.look, me.name)}<div class="t"><b>${esc(me.name)} · P${me.rank}</b>
+      <span>${me.count}/${me.goal} · ${Math.round(me.pct * 100)} % · <span style="color:#ffe08a">${nextTxt(me)}</span></span></div></button>
+    <button class="go disp" id="goBtn">+1 Termin</button>`;
+  $('#goBtn').onclick = () => hit(1);
+  $('#undoBtn').onclick = () => { if (confirm('Letzten Termin wieder abziehen?')) hit(-1); };
+  $('#meCard').onclick = () => setTab('garage');
+}
+
+// ---------- Garage ----------
+let stage = null, draft = null, saveT = null, thumbs = {}, thumbSig = '';
+try { stage = new Stage($('#cStage')); } catch (e) { $('#cStage').style.display = 'none'; }
+const HAT_EMO = { none: '💇', helmet: '⛑️', cap: '🧢', crown: '👑', tophat: '🎩', party: '🥳', viking: '⚔️', santa: '🎅', antlers: '🦌' };
+const myPct = () => { const me = S && compute().list.find(x => x.id === meId); return me ? me.pct : 0; };
+const GL_EMO = { none: '🙂', sun: '🕶️', ski: '🥽' };
+function renderGarage(fromServer) {
+  const me = S && S.people.find(x => x.id === meId), box = $('#gOpts');
+  if (!me) { draft = null; $('#stageBox').style.display = 'none';
+    box.innerHTML = '<div class="opt" style="text-align:center"><p style="margin-bottom:12px">In der Garage baust du dein Fahrzeug und deine Figur. Steig zuerst ins Rennen ein.</p><button class="btn pri" id="gJoin">🏁 Einsteigen</button></div>'; $('#gJoin').onclick = openJoin; return; }
+  $('#stageBox').style.display = '';
+  if (!draft || draft.id !== me.id || fromServer) draft = { id: me.id, name: me.name, goal: me.goal, look: { ...Mo.DEFAULT, initials: mkIni(me.name), ...me.look } };
+  else if (box.querySelector('#gName')) return;
+  buildGarage();
+}
+function makeThumbs() {
+  const L = draft.look, sig = [L.color, L.suit, L.suit2, L.pattern, L.skin, L.hat, L.glasses, L.hair, L.hairColor, L.initials, L.goldPaint, L.flag].join();
+  if (sig === thumbSig) return; thumbSig = sig;
+  try { for (const v of Mo.VEHICLES) thumbs[v.key] = vehicleThumb({ ...L, vehicle: v.key });
+    for (const h of Mo.HAIRS) thumbs['hair_' + h.key] = figureThumb({ ...L, hat: 'none', glasses: 'none', hair: h.key }, 'head');
+    for (const p of Mo.PATTERNS) thumbs['pat_' + p.key] = figureThumb({ ...L, pattern: p.key }, 'body');
+    for (const h of Mo.HATS) thumbs['hat_' + h.key] = figureThumb({ ...L, hat: h.key }, 'head'); } catch (e) { console.warn(e); thumbs = {}; }
+}
+function buildGarage() {
+  const L = draft.look, box = $('#gOpts'), y = scrollY;
+  makeThumbs();
+  if (stage) { stage.set(L); stage.start(); }
+  $('#gNm').innerHTML = `<b style="background:${L.suit};color:${ink(L.suit)}">${esc(L.initials || mkIni(draft.name))}</b>${esc(draft.name)}`;
+  const pc = myPct(), lockedAt = it => it.reward && pc < it.reward && L[it.g] !== it.key ? it.reward : 0;
+  const chip = (group, key, inner, label, rw) => { const lk = rw && pc < rw && L[group] !== key;
+    return `<button class="chip${lk ? ' locked' : ''}" ${lk ? `data-lock="${Math.round(rw * 100)}"` : `data-g="${group}" data-k="${key}"`} aria-pressed="${L[group] === key}"${lk ? ` title="Wird bei ${Math.round(rw * 100)} % freigeschaltet"` : ''}>${inner}<div>${lk ? '🔒 ab ' + Math.round(rw * 100) + ' %' : label}</div></button>`; };
+  const rewCards = REW.map(r => { const ok = pc >= r.at || r.has(L), on = r.has(L);
+    return `<div class="rw ${ok ? (on ? 'on' : '') : 'lock'}"><span class="e">${ok ? r.emoji : '🔒'}</span><b>${r.name}</b>${Math.round(r.at * 100)} % · ${r.where}
+      ${ok ? `<button data-rw="${r.key}">${on ? 'Ablegen' : 'Anziehen'}</button>` : `<div class="bar"><i style="width:${Math.min(100, pc / r.at * 100)}%"></i></div>`}</div>`; }).join('');
+  const img = (k, e) => thumbs[k] ? `<img class="sq" src="${thumbs[k]}" alt="">` : `<span class="e">${e}</span>`;
+  const sw = (group, list) => `<div class="sw">${list.map(c => `<button data-g="${group}" data-k="${c}" style="background:${c}" aria-pressed="${L[group] === c}" aria-label="Farbe ${c}"></button>`).join('')}</div>`;
+  box.innerHTML = `
+    <div class="opt"><h3>Fahrer·in</h3>
+      <div class="two"><div><label for="gName">Name</label><input class="field" id="gName" maxlength="30" value="${esc(draft.name)}"></div>
+      <div><label for="gIni">Initialen</label><input class="field ini" id="gIni" maxlength="3" value="${esc(L.initials || '')}"></div></div>
+      <label for="gGoal">Ambitionsniveau (Termine bis Ziel-Datum)</label><input class="field" id="gGoal" type="number" min="1" max="9999" inputmode="numeric" value="${draft.goal}"${S.settings.lockGoals ? ' disabled' : ''}>
+      <div class="hint" id="gHint"></div></div>
+    <div class="opt"><h3>🎁 Belohnungen</h3><div class="rew">${rewCards}</div>
+      <div class="hint">Jede Etappe schaltet etwas frei, das alle im Wald sehen. Einmal freigeschaltet, bleibt es dir.</div></div>
+    <div class="opt"><h3>1 · Fahrzeug wählen <button id="gRand" style="color:var(--gold);font-weight:800;text-transform:none">🎲 Zufall</button></h3>
+      <div class="chips">${Mo.VEHICLES.map(v => chip('vehicle', v.key, thumbs[v.key] ? `<img src="${thumbs[v.key]}" alt="">` : `<span class="e">${v.emoji}</span>`, v.name)).join('')}</div></div>
+    <div class="opt"><h3>2 · Lackieren</h3>${sw('color', Mo.PALETTE)}</div>
+    <div class="opt"><h3>3 · Rennanzug</h3><div class="chips small">${Mo.PATTERNS.map(p => chip('pattern', p.key, img('pat_' + p.key, '🏎️'), p.name, p.reward)).join('')}</div>
+      <label>Hauptfarbe (auch Helm &amp; Mütze)</label>${sw('suit', Mo.PALETTE)}<label>Zweitfarbe (Streifen, Muster)</label>${sw('suit2', Mo.PALETTE)}</div>
+    <div class="opt"><h3>4 · Frisur</h3><div class="chips small">${Mo.HAIRS.map(h => chip('hair', h.key, img('hair_' + h.key, '💇'), h.name)).join('')}</div>
+      <label>Haarfarbe</label>${sw('hairColor', Mo.HAIR_COLORS)}</div>
+    <div class="opt"><h3>5 · Hautton</h3>${sw('skin', Mo.SKINS)}</div>
+    <div class="opt"><h3>6 · Kopfbedeckung</h3><div class="chips small">${Mo.HATS.map(h => chip('hat', h.key, img('hat_' + h.key, HAT_EMO[h.key]), h.name, h.reward)).join('')}</div>${L.hat === 'helmet' ? '<div class="hint">Lange Haare schauen unter dem Helm hervor.</div>' : ''}</div>
+    <div class="opt"><h3>7 · Brille</h3><div class="chips small">${Mo.GLASSES.map(h => chip('glasses', h.key, `<span class="e">${GL_EMO[h.key]}</span>`, h.name)).join('')}</div>${L.hat === 'helmet' ? '<div class="hint">Unter dem Helm sieht man keine Brille.</div>' : ''}</div>`;
+  scrollTo(0, y);
+  box.querySelectorAll('[data-g]').forEach(b => b.onclick = () => { draft.look[b.dataset.g] = b.dataset.k; queueSave(); buildGarage(); });
+  box.querySelectorAll('[data-lock]').forEach(b => b.onclick = () => toast(`🔒 Wird bei ${b.dataset.lock} % deines Ambitionsniveaus freigeschaltet`));
+  box.querySelectorAll('[data-rw]').forEach(b => b.onclick = () => { const r = REW.find(x => x.key === b.dataset.rw);
+    if (r.has(draft.look)) { if (r.key === 'antlers') draft.look.hat = 'helmet'; else if (r.key === 'gold') draft.look.pattern = 'racing'; else draft.look[r.key] = false; }
+    else { draft.look = r.apply(draft.look); toast(`${r.emoji} ${r.name} – sieht stark aus!`); }
+    queueSave(); buildGarage(); });
+  $('#gName').oninput = e => { const old = mkIni(draft.name); draft.name = e.target.value;
+    if (!draft.look.initials || draft.look.initials === old) { draft.look.initials = mkIni(draft.name); $('#gIni').value = draft.look.initials; }
+    $('#gNm').innerHTML = `<b style="background:${L.suit};color:${ink(L.suit)}">${esc(draft.look.initials)}</b>${esc(draft.name)}`; queueSave(); };
+  $('#gIni').oninput = e => { const v = e.target.value.toUpperCase().replace(/[^A-ZÄÖÜ0-9]/g, '').slice(0, 3); e.target.value = v; if (v) { draft.look.initials = v; $('#gNm b').textContent = v; queueSave(); } };
+  $('#gGoal').oninput = e => { const n = parseInt(e.target.value, 10); if (n >= 1) { draft.goal = n; queueSave(); } goalHint(e.target, $('#gHint')); };
+  $('#gRand').onclick = () => { const r = a => a[Math.floor(Math.random() * a.length)];
+    const free = a => a.filter(x => !x.reward || myPct() >= x.reward);
+    Object.assign(draft.look, { vehicle: r(Mo.VEHICLES).key, color: r(Mo.PALETTE), suit: r(Mo.PALETTE), suit2: r(Mo.PALETTE), pattern: r(free(Mo.PATTERNS)).key, skin: r(Mo.SKINS), hat: r(free(Mo.HATS)).key, glasses: r(Mo.GLASSES).key, hair: r(Mo.HAIRS).key, hairColor: r(Mo.HAIR_COLORS) });
+    queueSave(); buildGarage(); };
+  goalHint($('#gGoal'), $('#gHint'));
+  if (S.settings.lockGoals) $('#gHint').textContent = '🔒 Ambitionsniveau ist festgelegt. Änderungen nur über die Rennleitung.';
+}
+function queueSave() {
+  $('#gSaved').textContent = 'speichert …'; clearTimeout(saveT);
+  saveT = setTimeout(async () => {
+    try { await api(`/api/people/${meId}`, { method: 'PATCH', body: { name: draft.name, goal: draft.goal, look: draft.look } }); $('#gSaved').textContent = '✓ gespeichert'; }
+    catch (e) { $('#gSaved').textContent = '⚠️ ' + e.message; }
+  }, 500);
+}
+function goalHint(el, hint) { const p = pace(), v = parseInt(el.value, 10), weeks = Math.max(1, p.daysLeft / 7);
+  hint.textContent = v > 0 ? `≈ ${(v / weeks).toFixed(1)} Termine pro Woche in den restlichen ${Math.round(weeks)} Wochen` : ''; }
+
+// ---------- Tabs ----------
+const WIDE = matchMedia('(min-width:2200px)');
+function setTab(t) {
+  if (WIDE.matches && t === 'board') t = 'race';           // breit: Tafel steht neben dem Wald
+  tab = t; ls.set('gp_tab', t);
+  document.querySelectorAll('.tabs button').forEach(b => b.setAttribute('aria-selected', b.dataset.tab === t));
+  for (const id of ['race', 'board', 'garage']) $('#' + id).hidden = !(id === t || (WIDE.matches && t === 'race' && id === 'board'));
+  if (forest) { if (t === 'race') forest.start(); else forest.stop(); }
+  if (stage && t !== 'garage') stage.stop();
+  if (t === 'garage' && S) renderGarage(true);
+  scrollTo({ top: 0, behavior: 'smooth' });
+}
+document.querySelectorAll('.tabs button').forEach(b => b.onclick = () => setTab(b.dataset.tab));
+WIDE.addEventListener('change', () => setTab(tab === 'board' ? 'race' : tab));
+document.addEventListener('visibilitychange', () => { if (document.hidden) { forest && forest.stop(); stage && stage.stop(); } else setTab(tab); });
+
+// ---------- Aktionen ----------
+let busy = false;
+async function hit(delta) {
+  if (busy || !meId) return; busy = true;
+  try { await api(`/api/people/${meId}/termin`, { method: 'POST', body: { delta } });
+    if (delta > 0) { vroom(); burst(innerWidth - 70, innerHeight - 60, 36); if (tab !== 'race') toast('🏎️ +1 – ab in den Wald!'); } }
+  catch (e) { toast('⚠️ ' + e.message); }
+  finally { setTimeout(() => busy = false, 400); }
+}
+function openJoin() {
+  const dl = $('#dJoin');
+  $('#jEnd').textContent = parseD(S.settings.endDate).toLocaleDateString('de-CH');
+  $('#pickList').innerHTML = S.people.map(x => `<button data-id="${x.id}">${badge({ ...Mo.DEFAULT, ...x.look }, x.name)}${esc(x.name)}</button>`).join('');
+  $('#pickList').querySelectorAll('button').forEach(b => b.onclick = () => { meId = b.dataset.id; ls.set('gp_me', meId); dl.close(); render(); });
+  $('#jName').value = ''; $('#jIni').value = ''; $('#jGoal').value = ''; $('#jHint').textContent = ''; $('#jLock').style.display = S.settings.lockGoals ? '' : 'none';
+  dl.showModal();
+}
+$('#jName').oninput = () => { $('#jIni').placeholder = mkIni($('#jName').value) || 'SK'; };
+$('#jIni').oninput = e => { e.target.value = e.target.value.toUpperCase().replace(/[^A-ZÄÖÜ0-9]/g, '').slice(0, 3); };
+$('#jGoal').oninput = () => goalHint($('#jGoal'), $('#jHint'));
+$('#jOk').onclick = async () => {
+  try {
+    const ini = $('#jIni').value || mkIni($('#jName').value);
+    if (S.settings.lockGoals && parseInt($('#jGoal').value, 10) > 0 && !confirm(`Dein Ambitionsniveau: ${parseInt($('#jGoal').value, 10)} Termine bis zum Ziel-Datum.\n\nDanach ist es fix und nur noch über die Rennleitung änderbar. Einsteigen?`)) return;
+    const pers = await api('/api/people', { method: 'POST', body: { name: $('#jName').value, goal: $('#jGoal').value, look: { initials: ini } } });
+    meId = pers.id; ls.set('gp_me', meId); $('#dJoin').close();
+    toast('🏁 Willkommen! Jetzt in der Garage dein Fahrzeug bauen.');
+    setTimeout(() => setTab('garage'), 300);
+  } catch (e) { $('#jHint').textContent = '⚠️ ' + e.message; }
+};
+document.querySelectorAll('[data-close]').forEach(b => b.onclick = () => b.closest('dialog').close());
+function askCode() { const d = $('#dCode'); if (!d.open) d.showModal(); }
+$('#cOk').onclick = async () => {
+  const c = $('#cCode').value.trim();
+  const r = await fetch('/api/access', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code: c }) }).then(r => r.json());
+  if (r.ok) { code = c; ls.set('gp_code', c); $('#dCode').close(); connect(); } else $('#cHint').textContent = '⚠️ Code stimmt nicht';
+};
+
+// ---------- Effekte ----------
+$('#soundBtn').textContent = sound ? '🔊' : '🔇';
+$('#soundBtn').onclick = () => { sound = !sound; ls.set('gp_sound', sound ? 'on' : 'off'); $('#soundBtn').textContent = sound ? '🔊' : '🔇'; };
+let actx;
+function vroom(big) { if (!sound) return;
+  try { actx = actx || new (window.AudioContext || window.webkitAudioContext)();
+    const t = actx.currentTime, o = actx.createOscillator(), g = actx.createGain(), f = actx.createBiquadFilter();
+    o.type = 'sawtooth'; f.type = 'lowpass'; f.frequency.value = 900;
+    if (big) { [400, 500, 650, 800].forEach((v, i) => o.frequency.setValueAtTime(v, t + i * .15)); }
+    else { o.frequency.setValueAtTime(70, t); o.frequency.exponentialRampToValueAtTime(260, t + .35); o.frequency.exponentialRampToValueAtTime(140, t + .6); }
+    g.gain.setValueAtTime(.0001, t); g.gain.exponentialRampToValueAtTime(.22, t + .05); g.gain.exponentialRampToValueAtTime(.0001, t + (big ? .8 : .65));
+    o.connect(f).connect(g).connect(actx.destination); o.start(t); o.stop(t + .9); } catch {} }
+let tT;
+function toast(msg) { const t = $('#toast'); t.textContent = msg; t.classList.add('show'); clearTimeout(tT); tT = setTimeout(() => t.classList.remove('show'), 2600); }
+const cv = $('#fx'), cx = cv.getContext('2d'); let parts = [], raf = 0;
+function burst(x, y, n, gold) { cv.width = innerWidth; cv.height = innerHeight;
+  const cols = gold ? ['#ffd23f', '#fff', '#111', '#e63946'] : ['#e63946', '#3a86ff', '#ffd23f', '#06d6a0', '#fff'];
+  for (let i = 0; i < n; i++) parts.push({ x, y, vx: (Math.random() - .5) * 12, vy: -Math.random() * 12 - 3, s: 4 + Math.random() * 5, c: cols[i % cols.length], r: Math.random() * 6, l: 70 + Math.random() * 40 });
+  if (!raf) raf = requestAnimationFrame(step); }
+function step() { cx.clearRect(0, 0, cv.width, cv.height); parts = parts.filter(p => p.l-- > 0);
+  for (const p of parts) { p.vy += .35; p.x += p.vx; p.y += p.vy; p.r += .2; cx.save(); cx.translate(p.x, p.y); cx.rotate(p.r); cx.fillStyle = p.c; cx.fillRect(-p.s / 2, -p.s / 2, p.s, p.s * .6); cx.restore(); }
+  raf = parts.length ? requestAnimationFrame(step) : 0; }
+function celebrate(name, me) {
+  $('#bigS').textContent = me ? 'Du hast dein Ambitionsniveau erreicht! 🏆' : `${name} fährt durchs Zieltor! 🏆`;
+  $('#big').classList.add('show'); vroom(true);
+  for (let i = 0; i < 5; i++) setTimeout(() => burst(Math.random() * innerWidth, innerHeight * .4, 60, true), i * 250);
+  setTimeout(() => $('#big').classList.remove('show'), 3400); }
+$('#big').onclick = () => $('#big').classList.remove('show');
+function handleEvent(ev) {
+  if (!ev || !S) return;
+  const p = S.people.find(x => x.id === ev.personId);
+  if (ev.type === 'hit' && p) { const me = ev.personId === meId;
+    forest && forest.boost(ev.personId);
+    const cp = CPS.find(c => ev.before / p.goal < c && ev.after / p.goal >= c);
+    const unl = me ? REW.filter(r => ev.before / p.goal < r.at && ev.after / p.goal >= r.at) : [];
+    if (unl.length) setTimeout(() => { toast(`🎁 Neu freigeschaltet: ${unl.map(r => r.emoji + ' ' + r.name).join(', ')} – jetzt in der Garage!`); if (tab === 'garage') renderGarage(true); }, ev.after >= p.goal ? 3600 : 2700);
+    if (ev.before < p.goal && ev.after >= p.goal) celebrate(p.name, me);
+    else if (cp) { toast(`🚩 ${me ? 'Du hast' : p.name + ' hat'} das Zwischenziel ${Math.round(cp * 100)} % erreicht!`); vroom(true); for (let i = 0; i < 3; i++) setTimeout(() => burst(innerWidth * (.3 + i * .2), innerHeight * .35, 40, true), i * 200); }
+    else if (!me) toast(`🏎️ ${p.name} gibt Gas! ${Math.round(ev.after / p.goal * 100)} %`); }
+  if (ev.type === 'join' && p && ev.personId !== meId) toast(`🏁 ${p.name} steht an der Startlinie`);
+}
+
+// ---------- Verbindung ----------
+let es;
+function connect() {
+  if (es) es.close();
+  es = new EventSource('/api/stream' + (code ? '?code=' + encodeURIComponent(code) : ''));
+  es.onmessage = m => { $('#offline').style.display = 'none'; const d = JSON.parse(m.data); S = d.state;
+    if (meId && !S.people.some(x => x.id === meId)) meId = null;
+    render(); handleEvent(d.event); };
+  es.onerror = async () => { $('#offline').style.display = 'block';
+    try { const r = await fetch('/api/state', { headers: code ? { 'x-access-code': code } : {} }); if (r.status === 401) { es.close(); askCode(); } } catch {} };
+}
+setTab(tab);
+connect();
+// ---------- Nachtruhe: App trennt sich vom Server, damit der Gratis-Server schlafen kann ----------
+let sleeping = false, wakeUntil = 0;
+function bernNow() { const p = Object.fromEntries(new Intl.DateTimeFormat('de-CH', { timeZone: 'Europe/Zurich', weekday: 'short', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).formatToParts(new Date()).map(x => [x.type, x.value]));
+  return { wd: p.weekday, min: +p.hour * 60 + +p.minute }; }
+function isQuiet() { if (!S) return false; const st = S.settings, n = bernNow(); if (st.quietWeekend && /^(Sa|So)/.test(n.wd)) return true;
+  if (!st.quietFrom || !st.quietTo) return false; const tm = s => +s.slice(0, 2) * 60 + +s.slice(3, 5), a = tm(st.quietFrom), b = tm(st.quietTo);
+  return a > b ? (n.min >= a || n.min < b) : (n.min >= a && n.min < b); }
+function checkSleep() {
+  const q = isQuiet() && Date.now() > wakeUntil;
+  if (q && !sleeping) { sleeping = true; if (es) es.close(); forest && forest.stop(); $('#sleepTxt').textContent = S.settings.quietWeekend && /^(Sa|So)/.test(bernNow().wd) ? 'Wochenende – der Wald ruht. Am Montag geht das Rennen weiter.' : `Nachtruhe ${S.settings.quietFrom}–${S.settings.quietTo} Uhr. Morgen geht das Rennen weiter.`; $('#sleep').classList.add('show'); }
+  if (!q && sleeping) { sleeping = false; $('#sleep').classList.remove('show'); connect(); setTab(tab); loadWeather(); }
+}
+$('#sleepWake').onclick = () => { wakeUntil = Date.now() + 20 * 60e3; checkSleep(); };
+setInterval(checkSleep, 30e3); setTimeout(checkSleep, 3000);
+async function loadWeather() { if (sleeping) return; try { const r = await fetch('/api/weather'); if (r.ok) { const w = await r.json(); forest && forest.setWeather(w); } } catch {} }
+loadWeather(); setInterval(loadWeather, 10 * 60e3);
+setInterval(render, 60000);
+})();
+</script>
+</body>
+</html>
