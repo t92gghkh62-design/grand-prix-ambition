@@ -98,7 +98,7 @@
       if (W) h.add(N(roofGeo(6.6, 5.4, 3.3, 9, .32, .16), SNOW));
       h.add(N(G.torus(3.3, .16, 22, 5, PI), '#d9c49a', 0, 4.5, 4.12), N(G.torus(3.0, .07, 22, 4, PI), '#7a4622', 0, 4.5, 4.1));     // Ründi
       for (let i = 0; i < 7; i++) h.add(box(.05, 1.6, .04, '#7a4622', -3 + i, 5.3, 4.03));
-      const win = (x, y, z, big) => { const s = big ? 1 : .8; litPane(this, litH, G.box(.72 * s, .82 * s, .008), x, y, z + .072, LR);
+      const win = (x, y, z, big) => { const s = big ? 1 : .8; this.farmWins && this.farmWins.push([x - 5.5, y, z - 3.5, s]); litPane(this, litH, G.box(.72 * s, .82 * s, .008), x, y, z + .072, LR);
         h.add(box(.95 * s, 1.05 * s, .05, '#ffffff', x, y, z + .02), box(.74 * s, .84 * s, .05, '#2a3d52', x, y, z + .045), box(.05, .84 * s, .055, '#ffffff', x, y, z + .05),
           box(.38 * s, 1.05 * s, .04, '#2f6b3a', x - .68 * s, y, z + .03), box(.38 * s, 1.05 * s, .04, '#2f6b3a', x + .68 * s, y, z + .03), box(1 * s, .2, .3, '#7a4a2a', x, y - .62 * s, z + .17));
         if (W) { h.add(box(1 * s, .08, .3, SNOW, x, y - .48 * s, z + .17)); for (let k = 0; k < 3; k++) h.add(sph(.09, '#2f6b3a', x - .3 + k * .3, y - .44 * s, z + .2), sph(.05, '#e63946', x - .25 + k * .3, y - .4 * s, z + .3)); }

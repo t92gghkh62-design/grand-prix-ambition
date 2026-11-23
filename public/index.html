@@ -12,6 +12,7 @@
 <script src="models.js"></script>
 <script src="forest.js"></script>
 <script src="extras.js"></script>
+<script src="advent.js"></script>
 <style>
 :root{--bg:#0b1a12;--panel:#12261b;--panel2:#183223;--line:#264a35;--text:#eef7f0;--muted:#9fbaa8;--red:#e63946;--gold:#ffd23f;--green:#06d6a0;--led:#ffb627}
 *{box-sizing:border-box;margin:0;padding:0}
@@ -56,6 +57,15 @@ section[hidden]{display:none!important}
 .msg .tx{min-width:0;font-size:14px;line-height:1.25}
 .msg .tx small{display:block;color:var(--muted);font-size:11px}
 .msg.mine{border-color:var(--gold)}
+.advg{display:grid;grid-template-columns:repeat(6,1fr);gap:6px;margin:10px 0}
+.door{aspect-ratio:1;border-radius:10px;border:1px solid var(--line);background:linear-gradient(160deg,#7a1c1c,#4a0f12);color:#ffe08a;font-weight:900;font-size:17px;display:grid;place-items:center;position:relative;padding:0}
+.door.open{background:var(--bg);color:var(--text);font-size:22px;cursor:pointer}
+.door.open small{position:absolute;top:2px;left:5px;font-size:10px;color:var(--muted);font-weight:700}
+.door.today{outline:2px solid var(--gold);outline-offset:1px}
+.door.shut{opacity:.85}
+.kranz{display:flex;align-items:center;gap:10px;background:var(--bg);border:1px solid var(--line);border-radius:12px;padding:8px 10px;width:100%;text-align:left;color:var(--text)}
+.kranz b{font-size:20px;letter-spacing:2px}
+.advt{font-size:13px;color:var(--muted);min-height:18px}
 .chips{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0}
 .chips button{width:auto;height:auto;min-width:0;flex:none;white-space:nowrap;line-height:1.2;padding:6px 10px;border-radius:999px;background:var(--panel2);border:1px solid var(--line);font-size:13px;font-weight:700}
 .pop{position:absolute;left:0;top:0;color:var(--gold);font-weight:900;font-size:22px;text-shadow:0 2px 0 #7a2b00,0 0 10px rgba(0,0,0,.4);font-family:"Russo One",Arial Black,sans-serif}
@@ -292,6 +302,7 @@ dialog{max-height:calc(100svh - 24px);overflow:auto}
   <div class="top">
     <div class="logo"><b class="disp" id="title">GRAND PRIX AMBITION</b><small id="subtitle"></small></div>
     <button class="topjoin" id="topJoin" hidden>🏁 Einsteigen</button>
+    <button class="ib" id="advBtn" title="Adventskalender" hidden>🎄</button>
     <button class="ib" id="soundBtn" title="Ton an/aus">🔊</button>
     <a class="ib" href="/admin" title="Rennleitung (Backend)" aria-label="Rennleitung">⚙️</a>
   </div>
@@ -354,12 +365,19 @@ dialog{max-height:calc(100svh - 24px);overflow:auto}
   <div class="row"><button class="btn" data-close>Später</button><button class="btn pri" id="jOk">Einsteigen</button></div>
 </dialog>
 
+<dialog id="dAdvent">
+  <h3 class="disp">🎄 Adventskalender</h3>
+  <button class="kranz" id="advKranz"></button>
+  <div class="advg" id="advGrid"></div>
+  <div class="advt" id="advTxt">Jeden Morgen um 8 Uhr öffnet sich ein Türchen. Tippe auf ein offenes Türchen, um es im Wald anzuschauen.</div>
+  <div class="row"><button class="btn" data-close>Schliessen</button></div>
+</dialog>
+
 <dialog id="dChat">
   <h3 class="disp">💬 Kurz-Chat</h3>
   <div class="msgs" id="chatList"></div>
   <div class="chips" id="chatChips"></div>
   <div style="display:flex;gap:8px;align-items:center"><input class="field" id="chatIn" maxlength="30" autocomplete="off" placeholder="Max. 30 Zeichen …" enterkeyhint="send"><span id="chatCnt" style="font-size:12px;color:var(--muted);min-width:34px;text-align:right">0/30</span></div>
-  <div class="hint">🔒 Bitte keine Kundennamen oder vertraulichen Infos. Nachrichten verschwinden nach 24 Stunden.</div>
   <div class="row"><button class="btn" data-close>Schliessen</button><button class="btn pri" id="chatSend">Senden</button></div>
 </dialog>
 
@@ -429,6 +447,8 @@ function compute() {
   S.people.forEach(pe => by[pe.id] = { ...pe, look: { ...Mo.DEFAULT, initials: mkIni(pe.name), ...pe.look }, count: 0, week: 0 });
   // reachedAt: Zeitpunkt, an dem der aktuelle Stand erreicht wurde (bei Gleichstand zählt, wer zuerst dort war)
   for (const e of [...S.entries].sort((a, b) => String(a.ts).localeCompare(String(b.ts)))) { const x = by[e.personId]; if (!x) continue; x.count += e.delta; const ts = new Date(e.ts).getTime(); if (e.delta) x.reachedAt = ts; if (ts >= wk) x.week += e.delta; }
+  { const dk = ts => new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Zurich' }).format(new Date(ts)), ck = new Date().getFullYear() + '-12-08';
+    for (const e of S.entries) if (e.delta > 0 && by[e.personId] && !by[e.personId].look.chlaus && dk(e.ts) === ck) by[e.personId].look = { ...by[e.personId].look, chlaus: true }; }   // Chlaussäckli
   const list = Object.values(by);
   for (const x of list) { x.pct = x.count / x.goal; x.cps = CPS.filter(c => x.pct >= c).length;
     const nc = CPS.find(c => x.pct < c) || (x.pct < 1 ? 1 : null); x.next = nc; x.toNext = nc ? Math.ceil(nc * x.goal - x.count - 1e-9) : 0; }
@@ -464,6 +484,7 @@ function tickerItems() {
     if ([10, 15, 20, 30].includes(dayCount[day]) && dayCount[day] - e.delta < dayCount[day]) msgs.push(`🔥 Heute schon <b>${dayCount[day]}</b> Termine im Team`);
     msgs.forEach(m => out.push({ ts: e.ts, html: m, i: out.length }));
   }
+  if (window.ADVENT) for (const a of ADVENT.tickerItems(new Date())) out.push({ ...a, i: out.length });
   for (const m of S.messages || []) if (ppl[m.personId]) out.push({ ts: m.ts, html: `💬 <b>${esc(ppl[m.personId].name)}</b>: «${esc(m.text)}»`, i: out.length });
   return out.sort((a, b) => a.ts < b.ts ? 1 : a.ts > b.ts ? -1 : (a.i || 0) - (b.i || 0)).slice(0, 14);
 }
@@ -730,6 +751,21 @@ function handleEvent(ev) {
     else if (!me) toast(`🏎️ ${p.name} gibt Gas! ${Math.round(ev.after / p.goal * 100)} %`); }
   if (ev.type === 'join' && p && ev.personId !== meId) toast(`🏁 ${p.name} steht an der Startlinie`);
 }
+
+// ---------- Adventskalender und Adventskranz ----------
+function renderAdvent() {
+  const A = window.ADVENT; if (!A) return; const st = A.state(new Date()), show = st.wreath || st.doors > 0; $('#advBtn').hidden = !show; if (!show) return;
+  const words = ['', 'erste', 'zweite', 'dritte', 'vierte'];
+  $('#advKranz').innerHTML = `<b>${'🕯️'.repeat(st.candles)}${'▫️'.repeat(4 - st.candles)}</b><span>${st.candles ? `Adventskranz beim Pingpong-Tisch: ${st.candles === 4 ? 'alle vier Kerzen brennen' : 'die ' + words[st.candles] + ' Kerze brennt'}` : 'Adventskranz'}</span>`;
+  const today = st.doors && new Date().getMonth() === 11 && new Date().getDate() === st.doors ? st.doors : 0;
+  $('#advGrid').innerHTML = A.DOORS.map(D => D.d <= st.doors ? `<button class="door open${D.d === today ? ' today' : ''}" data-d="${D.d}" title="${esc(D.title)}"><small>${D.d}</small>${D.emoji}</button>` : `<div class="door shut">${D.d}</div>`).join('');
+  $('#advGrid').querySelectorAll('[data-d]').forEach(b => b.onclick = () => showAdv(+b.dataset.d));
+  $('#advKranz').onclick = () => showAdv('kranz');
+  $('#advTxt').textContent = st.doors ? `Türchen ${st.doors}: ${A.DOORS[st.doors - 1].text}` : 'Ab 1. Dezember öffnet sich jeden Morgen um 8 Uhr ein Türchen.';
+}
+function showAdv(d) { $('#dAdvent').close(); setTab('race'); setTimeout(() => { if (!forest || !forest.showAdvent(d)) toast('🎄 Gleich zu sehen – der Wald lädt noch.'); }, 300); }
+$('#advBtn').onclick = () => { renderAdvent(); $('#dAdvent').showModal(); };
+setInterval(renderAdvent, 60e3); setTimeout(renderAdvent, 500);
 
 // ---------- Kurz-Chat (max. 30 Zeichen, verschwindet nach 24 h) ----------
 let chatSeen = null, chatUnread = false;

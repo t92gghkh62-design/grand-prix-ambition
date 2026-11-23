@@ -388,7 +388,7 @@
         for (let i = 0; i < 9; i++) g.add(new Node(G.box(.5, .42, .03), ['#e63946', '#ffd23f', '#3a86ff', '#06d6a0'][i % 4]).at(-Wd + .6 + i * (Wd * 2 - 1.2) / 8, 3.15, 0).rotate(0, 0, PI / 4).scale(.7, .7, 1));
         deco.add(g); this.signs.push({ pos: [q.p[0], 6.6, q.p[2]], text: '🚩 ' + txt, cls: 'cp' });
       });
-      this.litGroups = []; this.litPanes = [];   // Fenster, die abends Licht bekommen (Bauernhaus, Mühle)
+      this.litGroups = []; this.litPanes = []; this.farmWins = []; this.adventKey = null;   // Fenster, die abends Licht bekommen (Bauernhaus, Mühle)
       if (this.buildFarm) this.buildFarm(deco, height);
       if (this.buildArena) this.buildArena(deco, height);
       this.sceneDyn = []; this.sceneActors = []; if (this.buildScenes) this.buildScenes(deco, height);
@@ -652,7 +652,8 @@
       let top = mix([.03, .06, .16], mix([.35, .62, .9], [.3, .38, .66], gold), dayF); const bot = env.fog; if (cloud) top = mix(top, [.55, .58, .64].map(v => v * (.3 + .7 * dayF)), cloud);
       const world = this.canvas.parentElement;
       if (world) { world.style.background = `linear-gradient(180deg, ${css(top)} 0%, ${css(mix(top, bot, .55))} 42%, ${css(bot)} 70%, ${css(bot)} 100%)`; world.classList.toggle('night', dayF < .25); world.style.setProperty('--moon', dayF < .3 ? '1' : '0'); }
-      const lampOn = 1 - smooth(-2, 6, e);
+      const lampOn = 1 - smooth(-2, 6, e); this.lampOnV = lampOn;
+      if (this.buildAdvent && this.farmLife) this.buildAdvent();   // Adventskranz/-kalender: neues Türchen bzw. neue Kerze
       if (this.lamps) for (let i = 0; i < this.lamps.children.length; i += 2) { const b = this.lamps.children[i], g = this.lamps.children[i + 1];
         b.color = mix([.55, .5, .42], [1, .9, .55], lampOn); b.emis = .2 + .8 * lampOn; g.alpha = .38 * lampOn; g.scl = [1 + lampOn * .9, 1 + lampOn * .9, 1 + lampOn * .9]; }
       // Fensterlicht: in der Dämmerung gehen nach und nach Lichter an, spätabends wieder aus; frühmorgens brennt im Bauernhaus schon Licht
@@ -946,7 +947,7 @@
       for (const n of this.pondLife || []) if (n.visible !== false) out.push([n, NAMES[n.anim.kind] || 'Teichbewohner', .3]);
       for (const c of this.crowd || []) out.push([c.node, c.name || (c.group.arena ? 'Fan im Zielgelände' : 'Fan am Wegrand'), 1.6]);
       for (const f of this.farmLife || []) out.push([f.node, Forest.FARM_NAMES[f.kind] || 'Hoftier', .8]);
-      for (const h of this.hikers || []) out.push([h.node, 'Wanderer', 1.6]);
+      for (const h of this.hikers || []) out.push([h.node, h.name || 'Wanderer', 1.6]);
       for (const a of this.sceneActors || []) out.push([a.node, a.name, 1.6]);
       for (const f of this.flyers || []) out.push([f.node, f.kind === 'hawk' ? 'Bussard' : 'Vogel', 0]);
       return out; }
@@ -1049,6 +1050,7 @@
       this.moveAnimals(t, dt);
       if (this.updateFarm) this.updateFarm(t, dt);
       if (this.updateScenes) this.updateScenes(t, dt);
+      if (this.updateAdvent) this.updateAdvent(t, rdt);
       if (this.timeScale > 1) this.timeOffset += rdt * 1000 * (this.timeScale - 1);
       this.skyT = (this.skyT || 0) + rdt; if (this.skyT > (this.timeScale > 1 ? .05 : 1)) { this.skyT = 0; this.updateSky(); }
       this.moveFlyers(t);
@@ -1065,7 +1067,7 @@
       if (this.mode === 'follow') { const r = this.racers.get(this.followId); if (r) this.want = this.chase(r); }
       if (this.mode === 'tour') this.want = this.tourShot(t, rdt);
       if (this.mode === 'track' && this.trackObj) { const p = this.trackObj.pos, small = p[1] < 1 && !this.trackObj.anim?.legs?.length ? .5 : 1;
-        this.want = { yaw: (this.trackYaw = (this.trackYaw ?? this.cam.yaw)) + this.uo.yaw, pitch: .3 + this.uo.pitch, dist: Math.max(2.6, 7 * small * this.uo.dist), target: [p[0], p[1] + .9, p[2]] }; }
+        this.want = { yaw: (this.trackYaw = (this.trackYaw ?? this.trackObj.camYaw ?? this.cam.yaw)) + this.uo.yaw, pitch: .3 + this.uo.pitch, dist: Math.max(2.6, (this.trackObj.camDist || 7 * small) * this.uo.dist), target: [p[0], p[1] + (this.trackObj.camH ?? .9), p[2]] }; }
       else this.trackYaw = null;
       const w = this.want, c = this.cam, k = 1 - Math.exp(-rdt * (this.mode === 'tour' ? 1.5 : 2.6));
       if (w) { let dy = w.yaw - c.yaw; while (dy > PI) dy -= 2 * PI; while (dy < -PI) dy += 2 * PI;
@@ -1076,7 +1078,7 @@
       const far2 = 42 * 42, L = n => { const dx = n.pos[0] - eye[0], dy = n.pos[1] - eye[1], dz = n.pos[2] - eye[2]; if (dx * dx + dy * dy + dz * dz < far2) return n;
         const l = n.lod || (n.lod = lodOf(n)), b = n.anim && n.anim.bob ? n.anim.bob.pos[1] * n.scl[1] : 0; l.pos = [n.pos[0], n.pos[1] + b, n.pos[2]]; l.rot = n.rot; l.scl = n.scl; return l; };   // Hüpfen bleibt sichtbar
       const clouds = eye[1] > 24 ? [] : this.clouds;   // von oben (Übersicht) verdecken Wolken sonst die Strecke
-      this.r.render([...this.static, ...clouds, this.lamps, ...this.pondLife, this.pondFx, this.water, this.fall, ...this.animals.map(a => L(a.node)), ...this.farmLife.map(f => L(f.node)), ...(this.sceneDyn || []), ...(this.litGroups || []), ...(this.sceneActors || []).map(a => L(a.node)), ...(this.confetti ? [this.confetti] : []), ...this.rockLife.map(a => L(a.n)), ...this.crowd.map(c => L(c.node)), ...this.hikers.map(h => L(h.node)), ...this.flyers.map(f => f.node), ...[...this.racers.values()].map(r => r.node), ...[...this.racers.values()].filter(r => r.fig).map(r => L(r.fig)), this.dust, this.motes], { pos: eye, target: c.target, fov: c.fov, near: .5, far: 400 });
+      this.r.render([...this.static, ...clouds, this.lamps, ...this.pondLife, this.pondFx, this.water, this.fall, ...this.animals.map(a => L(a.node)), ...this.farmLife.map(f => L(f.node)), ...(this.sceneDyn || []), ...(this.litGroups || []), ...(this.advStatic || []), ...(this.advDyn || []), ...(this.sceneActors || []).map(a => L(a.node)), ...(this.confetti ? [this.confetti] : []), ...this.rockLife.map(a => L(a.n)), ...this.crowd.map(c => L(c.node)), ...this.hikers.map(h => L(h.node)), ...this.flyers.map(f => f.node), ...[...this.racers.values()].map(r => r.node), ...[...this.racers.values()].filter(r => r.fig).map(r => L(r.fig)), this.dust, this.motes], { pos: eye, target: c.target, fov: c.fov, near: .5, far: 400 });
       // Beschriftungen
       const W = this.canvas.clientWidth, H = this.canvas.clientHeight;
       for (const r of this.racers.values()) { const rp = this.rp(r), s = this.r.project([rp[0], rp[1] + (r.fig ? 2.15 : 2.3 * (this.carScale || 1) + .35 + (r.li % 3) * .5), rp[2]]); const el = r.label;
@@ -1129,5 +1131,5 @@
     return figR.canvas.toDataURL('image/png');
   }
   window.figureThumb = figureThumb;
-  Forest.FINISH_T = FINISH_T; Forest.TW = TW; window.Forest = Forest; window.Stage = Stage; window.vehicleThumb = thumb;
+  Forest.FINISH_T = FINISH_T; Forest.START_T = START_T; Forest.TW = TW; window.Forest = Forest; window.Stage = Stage; window.vehicleThumb = thumb;
 })();

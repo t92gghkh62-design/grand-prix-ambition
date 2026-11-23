@@ -755,6 +755,11 @@
         plate(L.initials || '?', .022, L.color).at(-.32, -.16, .016), plate(L.initials || '?', .022, L.color).at(-.32, -.16, -.016).rotate(0, PI, 0));
       pen.add(merge(cloth)); pen.phase = Math.random() * 6; m.a.push(pen);
     }
+    if (L.chlaus) {                         // Chlaussäckli (Termin am Samichlaustag): rotes Säckli mit goldener Kordel hinter dem Sitz
+      const sx = se[0] - .5, sy = se[1] + .12;
+      m.s.add(part(G.sphere(.17, 9, 7), '#c1121f', sx, sy, .22).scale(1, 1.15, 1), part(G.cyl(.06, .1, .1, 8), '#c1121f', sx, sy + .22, .22),
+        part(G.torus(.065, .018, 10, 5), '#ffd23f', sx, sy + .2, .22).rotate(PI / 2, 0, 0), S(.045, '#ff9f1c', sx + .03, sy + .3, .25), S(.04, '#8a5a2b', sx - .04, sy + .29, .18));
+    }
     bob.add(merge(m.s), ...m.a);
     if (L.goldPaint) {                      // Glitzer: kleine leuchtende Sterne kreisen ums Fahrzeug
       const sp = new Node(null, null, { name: 'sparkle' }).at(0, 1.1, 0);
@@ -781,5 +786,5 @@
     A.bob.pos[1] = Math.abs(Math.sin(t * (4 + speed * 10))) * (.025 + speed * .05);
   }
 
-  window.Models = { REWARDS, GOLD, VEHICLES, HATS, GLASSES, PALETTE, SKINS, HAIRS, HAIR_COLORS, PATTERNS, DEFAULT, build, animate, shade, animal, animateAnimal, bird, animateBird, person, animatePerson, pondCreature, plate };
+  window.Models = { eyes, part, rod, fist, REWARDS, GOLD, VEHICLES, HATS, GLASSES, PALETTE, SKINS, HAIRS, HAIR_COLORS, PATTERNS, DEFAULT, build, animate, shade, animal, animateAnimal, bird, animateBird, person, animatePerson, pondCreature, plate };
 })();
