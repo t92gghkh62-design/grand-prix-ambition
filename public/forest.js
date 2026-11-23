@@ -364,6 +364,12 @@
     addObs(x, z, r) { const o = [x, z, r], ext = Math.max(0, r - 1.5);
       for (let i = Math.floor((x - ext) / 3); i <= Math.floor((x + ext) / 3); i++) for (let j = Math.floor((z - ext) / 3); j <= Math.floor((z + ext) / 3); j++) {
         const k = i + ',' + j; let l = this.obs.get(k); if (!l) this.obs.set(k, l = []); l.push(o); } }
+    obsBlocked(x, z, r) {   // nur feste Hindernisse (ohne Fahrzeuge/Wanderer)
+      const x0 = Math.floor((x - r - 1.5) / 3), x1 = Math.floor((x + r + 1.5) / 3), z0 = Math.floor((z - r - 1.5) / 3), z1 = Math.floor((z + r + 1.5) / 3);
+      for (let i = x0; i <= x1; i++) for (let j = z0; j <= z1; j++) { const l = this.obs.get(i + ',' + j); if (!l) continue;
+        for (const o of l) { const dx = o[0] - x, dz = o[1] - z, rr = o[2] + r; if (dx * dx + dz * dz < rr * rr) return true; } }
+      return false;
+    }
     blocked(x, z, r, self) {
       const x0 = Math.floor((x - r - 1.5) / 3), x1 = Math.floor((x + r + 1.5) / 3), z0 = Math.floor((z - r - 1.5) / 3), z1 = Math.floor((z + r + 1.5) / 3);
       for (let i = x0; i <= x1; i++) for (let j = z0; j <= z1; j++) { const l = this.obs.get(i + ',' + j); if (!l) continue;
@@ -559,7 +565,16 @@
         if (h.pause > 0) { h.pause -= dt; } else { h.t += h.dir * h.speed * dt / T; h.nextPause -= dt;
           if (h.t > .985) { h.t = .985; h.dir = -1; } if (h.t < .01) { h.t = .01; h.dir = 1; }
           if (h.nextPause < 0) { h.pause = 4 + Math.random() * 5; h.nextPause = 15 + Math.random() * 25; } }
-        const q = this.path.at(h.t), x = q.p[0] + q.side[0] * h.side * 4.65, z = q.p[2] + q.side[2] * h.side * 4.65;
+        // Wanderer weichen am Wegrand aus: Pfosten, Laternen, Fans und anderen Wanderern (seitlich versetzen, sonst kurz warten)
+        const q = this.path.at(h.t), qa = this.path.at(Math.max(.005, Math.min(.995, h.t + h.dir * 1.4 / T)));
+        const spot = (qq, off) => [qq.p[0] + qq.side[0] * h.side * off, qq.p[2] + qq.side[2] * h.side * off];
+        const free = (qq, off) => { const [px, pz] = spot(qq, off); if (this.obsBlocked(px, pz, .34)) return false;
+          for (const o of this.hikers) if (o !== h && o.xz && Math.hypot(o.xz[0] - px, o.xz[1] - pz) < .85) return false; return true; };
+        if (h.off === undefined) { h.off = 4.65; h.want = 4.65; }
+        if (!free(q, h.want) || !free(qa, h.want)) { const alt = [4.65, 4.1, 3.6, 5.15, 3.1, 2.6].find(o => free(q, o) && free(qa, o)); if (alt === undefined) h.pause = Math.max(h.pause, .5); else h.want = alt; }
+        else if (h.want !== 4.65 && free(q, 4.65) && free(qa, 4.65)) h.want = 4.65;
+        h.off += Math.max(-1.4 * dt, Math.min(1.4 * dt, h.want - h.off));
+        const x = q.p[0] + q.side[0] * h.side * h.off, z = q.p[2] + q.side[2] * h.side * h.off; h.xz = [x, z];
         const yaw = h.pause > 0 ? Math.atan2(h.side * q.side[2], -h.side * q.side[0]) : Math.atan2(-q.tan[2] * h.dir, q.tan[0] * h.dir);
         let dy = yaw - h.node.rot[1]; while (dy > PI) dy -= 2 * PI; while (dy < -PI) dy += 2 * PI;
         h.node.pos = [x, this.height(x, z), z]; h.node.rot = [0, h.node.rot[1] + dy * Math.min(1, dt * 4), 0];
@@ -652,7 +667,7 @@
     // ---------- Waldtiere: Bären, Rehe, Hirsche, ein Wolfsrudel, Dachse ----------
     spawnAnimals() {
       const R = rng(7), P = this.path; this.animals = [];
-      const spot = (minD = 9, maxD = 34) => { for (let i = 0; i < 400; i++) { const x = (R() - .5) * 110, z = -78 + R() * 125, d = P.dist(x, z); if (d > minD && d < maxD && !this.blocked(x, z, 1.2) && !(this.farm && this.inFarm(x, z, 2))) return [x, z]; } return [30, 0]; };
+      const spot = (minD = 9, maxD = 34) => { for (let i = 0; i < 400; i++) { const x = (R() - .5) * 110, z = -78 + R() * 125, d = P.dist(x, z); if (d > minD && d < maxD && !this.blocked(x, z, 1.2) && !(this.farm && this.inFarm(x, z, 2)) && !(this.games && Math.hypot(x - this.games.x, z - this.games.z) < 10)) return [x, z]; } return [30, 0]; };
       const SPEED = { bear: 1.0, deer: 1.5, stag: 1.3, wolf: 2.1, badger: .8, fox: 1.9, hare: 2.6, squirrel: 1.8, boar: 1.1, piglet: 1.3, hedgehog: .35, owl: 0 }, SCALE = { bear: 1.9, deer: 1.7, stag: 1.7, wolf: 1.7, badger: 1.8, fox: 1.8, hare: 1.9, squirrel: 2.2, boar: 1.6, piglet: 1.6, hedgehog: 2, owl: 2.2 };
       const RAD = { bear: 1.0, deer: .6, stag: .7, wolf: .5, badger: .45, fox: .45, hare: .3, squirrel: .2, boar: .7, piglet: .3, hedgehog: .3, owl: .3 };
       const add = (kind, pos, leader, off) => { const n = Models.animal(kind); n.scl = [SCALE[kind], SCALE[kind], SCALE[kind]]; n.cull = 3;
@@ -674,7 +689,7 @@
       // Ziel mit freier Sichtlinie bevorzugen (vermeidet Sackgassen zwischen Bäumen)
       this.pickTarget = a => { let fallback = null;
         for (let i = 0; i < 60; i++) { const x = a.x + (R() - .5) * 26, z = a.z + (R() - .5) * 26, pd = P.dist(x, z);
-          if (!(Math.abs(x) < 62 && z > -82 && z < 50 && pd > (R() < .12 ? 0 : 7) && pd < 24 && !this.blocked(x, z, a.rad + .4) && !this.inPond(x, z, a.rad + 1) && !(this.farm && this.inFarm(x, z, a.rad + 1.5)))) continue;
+          if (!(Math.abs(x) < 62 && z > -82 && z < 50 && pd > (R() < .12 ? 0 : 7) && pd < 24 && !this.blocked(x, z, a.rad + .4) && !this.inPond(x, z, a.rad + 1) && !(this.farm && this.inFarm(x, z, a.rad + 1.5)) && !(this.games && Math.hypot(x - this.games.x, z - this.games.z) < 9.5))) continue;
           if (this.lineFree(a.x, a.z, x, z, a.rad)) { a.tx = x; a.tz = z; return; } if (!fallback) fallback = [x, z]; }
         if (fallback) { a.tx = fallback[0]; a.tz = fallback[1]; } else { a.tx = a.x; a.tz = a.z; } };
     }

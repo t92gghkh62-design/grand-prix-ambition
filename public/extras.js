@@ -183,7 +183,7 @@
     const cam = (u, v, r, top) => { const p = F.w(u, v), key = Math.floor(p[0] / 6) + ',' + Math.floor(p[1] / 6); let l = this.trees.get(key); if (!l) this.trees.set(key, l = []); l.push([p[0], p[1], r, F.level + top]); };
     cam(-5.5, -3.5, 6.9, 9.4); cam(6.5, -4.5, 6.4, 8); cam(1, -7.6, 2.6, 5.8); cam(-9.6, 11, 3, 7);
     // Zonen für die Hoftiere (lokale Koordinaten) und feste Hindernisse darin
-    F.zones = { paddock: [2.2, 1.4, 11.2, 8.2], pigs: [-11.2, 3.6, -8, 8.3], yard: [-7, 1.6, .2, 8.4] };
+    F.zones = { paddock: [2.3, 1.9, 10.5, 7.6], pigs: [-10.6, 4.0, -8.4, 7.9], yard: [-6.8, 1.8, 0, 8.1] };   // mit Abstand zum Zaun
     F.blocks = [[-4.4, 3.6, 1.5], [-6.4, 7.2, 1.2], [-.6, 2.2, .9], [.4, 8.3, .4], [-1.6, 6.3, .7], [-3.6, 7.4, .6], [10.4, 7.7, 1.1], [8.9, 7.95, 1.1], [4.2, 7.6, 1.5], [-10.6, 3.8, .9]];
   };
 
@@ -467,7 +467,10 @@
         this.sceneActors.push({ node: n, name: 'Zuschauer·in', kind: 'fan' }); }
       const darts = new Node(); this.sceneDyn.push(darts);
       this.dart = { board, players: darters, darts, turn: 0, n: 0, t: 0, phase: 'aim', fly: null, cols: ['#ffd23f', '#3a86ff'] };
-      const p = at(-4, 0); this.addObs(p[0] - 2.4, p[2], .6);
+      // Spieler·innen, Bank und Tafel als Hindernisse (Tiere laufen nicht hindurch)
+      for (const a of this.sceneActors) this.addObs(a.node.pos[0], a.node.pos[2], .5);
+      for (const v of [-2.4, -1.6, -.8]) { const b = at(1.2, v); this.addObs(b[0], b[2], .45); }
+      { const c = at(6.3, -2.6); this.addObs(c[0], c[2], .55); }
     }
   };
 
