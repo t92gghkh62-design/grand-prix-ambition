@@ -44,6 +44,20 @@ section[hidden]{display:none!important}
 .sign{position:absolute;left:0;top:0;background:#c8a46b;color:#3b2611;font-weight:900;font-size:11px;padding:2px 7px;border-radius:5px;border:1px solid #7a5532;white-space:nowrap;font-family:"Russo One",Arial Black,sans-serif}
 .sign.cp{background:#fff;color:#111;border-color:var(--gold);font-size:12px;box-shadow:0 2px 10px rgba(0,0,0,.25)}
 .sign.gate{background:#111;color:#fff;border-color:#fff;font-size:12px}
+.say{position:absolute;left:0;top:0;max-width:180px;padding:5px 9px;border-radius:12px;background:#fff;color:#111;font-size:12px;font-weight:700;line-height:1.25;box-shadow:0 3px 10px rgba(0,0,0,.35);pointer-events:none;white-space:normal;overflow-wrap:anywhere;transition:opacity .4s}
+.say::after{content:"";position:absolute;left:50%;bottom:-6px;margin-left:-6px;border:6px solid transparent;border-bottom:0;border-top-color:#fff}
+.say b{color:#555;font-weight:800;margin-right:4px}
+.chatb{width:48px;height:62px;border-radius:16px;background:var(--panel);border:1px solid var(--line);font-size:22px;flex:none;position:relative}
+.chatb i{position:absolute;top:6px;right:6px;width:10px;height:10px;border-radius:50%;background:var(--red);display:none}
+.chatb.unread i{display:block}
+.msgs{display:flex;flex-direction:column;gap:6px;max-height:min(46vh,340px);overflow:auto;margin:10px 0;padding-right:2px}
+.msg{display:flex;gap:8px;align-items:flex-start;background:var(--bg);border:1px solid var(--line);border-radius:12px;padding:6px 8px}
+.msg .badge{min-width:28px;height:28px;font-size:10px}
+.msg .tx{min-width:0;font-size:14px;line-height:1.25}
+.msg .tx small{display:block;color:var(--muted);font-size:11px}
+.msg.mine{border-color:var(--gold)}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0}
+.chips button{width:auto;height:auto;min-width:0;flex:none;white-space:nowrap;line-height:1.2;padding:6px 10px;border-radius:999px;background:var(--panel2);border:1px solid var(--line);font-size:13px;font-weight:700}
 .pop{position:absolute;left:0;top:0;color:var(--gold);font-weight:900;font-size:22px;text-shadow:0 2px 0 #7a2b00,0 0 10px rgba(0,0,0,.4);font-family:"Russo One",Arial Black,sans-serif}
 .camctl{position:absolute;right:10px;top:10px;display:flex;flex-direction:column;gap:6px;z-index:5}
 .camctl button{background:rgba(8,20,13,.78);color:#fff;border:1px solid rgba(255,255,255,.25);border-radius:12px;padding:7px 10px;font-weight:800;font-size:12px;backdrop-filter:blur(4px)}
@@ -340,6 +354,15 @@ dialog{max-height:calc(100svh - 24px);overflow:auto}
   <div class="row"><button class="btn" data-close>Später</button><button class="btn pri" id="jOk">Einsteigen</button></div>
 </dialog>
 
+<dialog id="dChat">
+  <h3 class="disp">💬 Kurz-Chat</h3>
+  <div class="msgs" id="chatList"></div>
+  <div class="chips" id="chatChips"></div>
+  <div style="display:flex;gap:8px;align-items:center"><input class="field" id="chatIn" maxlength="30" autocomplete="off" placeholder="Max. 30 Zeichen …" enterkeyhint="send"><span id="chatCnt" style="font-size:12px;color:var(--muted);min-width:34px;text-align:right">0/30</span></div>
+  <div class="hint">🔒 Bitte keine Kundennamen oder vertraulichen Infos. Nachrichten verschwinden nach 24 Stunden.</div>
+  <div class="row"><button class="btn" data-close>Schliessen</button><button class="btn pri" id="chatSend">Senden</button></div>
+</dialog>
+
 <dialog id="dCode">
   <h3 class="disp">Zugangscode</h3>
   <p>Diese Seite ist fürs Team reserviert.</p>
@@ -441,6 +464,7 @@ function tickerItems() {
     if ([10, 15, 20, 30].includes(dayCount[day]) && dayCount[day] - e.delta < dayCount[day]) msgs.push(`🔥 Heute schon <b>${dayCount[day]}</b> Termine im Team`);
     msgs.forEach(m => out.push({ ts: e.ts, html: m, i: out.length }));
   }
+  for (const m of S.messages || []) if (ppl[m.personId]) out.push({ ts: m.ts, html: `💬 <b>${esc(ppl[m.personId].name)}</b>: «${esc(m.text)}»`, i: out.length });
   return out.sort((a, b) => a.ts < b.ts ? 1 : a.ts > b.ts ? -1 : (a.i || 0) - (b.i || 0)).slice(0, 14);
 }
 let tickSig = '', tickSeen = new Set();
@@ -519,8 +543,10 @@ function renderDock(list) {
   d.innerHTML = `<button class="undo" id="undoBtn" title="Letzten Termin korrigieren">↶</button>
     <button class="me-card" id="meCard">${badge(me.look, me.name)}<div class="t"><b>${esc(me.name)} · P${me.rank}</b>
       <span>${me.count}/${me.goal} · ${Math.round(me.pct * 100)} % · <span style="color:#ffe08a">${nextTxt(me)}</span></span></div></button>
+    <button class="chatb${chatUnread ? ' unread' : ''}" id="chatBtn" title="Kurz-Chat">💬<i></i></button>
     <button class="go disp" id="goBtn">+1 Termin</button>`;
   $('#goBtn').onclick = () => hit(1);
+  $('#chatBtn').onclick = openChat;
   $('#undoBtn').onclick = () => { if (confirm('Letzten Termin wieder abziehen?')) hit(-1); };
   $('#meCard').onclick = () => setTab('garage');
 }
@@ -705,6 +731,49 @@ function handleEvent(ev) {
   if (ev.type === 'join' && p && ev.personId !== meId) toast(`🏁 ${p.name} steht an der Startlinie`);
 }
 
+// ---------- Kurz-Chat (max. 30 Zeichen, verschwindet nach 24 h) ----------
+let chatSeen = null, chatUnread = false;
+const CHAT_CHIPS = ['Hopp! 🔥', 'Stark! 👏', 'Endspurt! 🏁', 'Wer holt mich ein? 😏', 'Gratuliere! 🎉', 'Weiter so! 💪'];
+function newChats() {
+  const ms = S.messages || [], first = !chatSeen; if (first) chatSeen = new Set();
+  for (const m of ms) { if (chatSeen.has(m.id)) continue; chatSeen.add(m.id);
+    if (first || Date.now() - Date.parse(m.ts) > 5 * 60e3) continue;
+    const p = S.people.find(x => x.id === m.personId); if (!p) continue;
+    forest && forest.say(m.personId, m.text);
+    if (m.personId !== meId) { if (!$('#dChat').open) { chatUnread = true; const b = $('#chatBtn'); b && b.classList.add('unread'); }
+      if (tab !== 'race' || !forest) toast(`💬 ${p.name}: ${m.text}`); } }
+  if ($('#dChat').open) renderChat();
+}
+function renderChat() {
+  const ms = (S.messages || []).slice(-30), by = Object.fromEntries(S.people.map(p => [p.id, p])), L = $('#chatList');
+  const look = p => ({ ...Mo.DEFAULT, initials: mkIni(p.name), ...p.look });
+  L.innerHTML = ms.length ? ms.filter(m => by[m.personId]).map(m => { const p = by[m.personId];
+    return `<div class="msg${m.personId === meId ? ' mine' : ''}">${badge(look(p), p.name)}<div class="tx"><small>${esc(p.name)} · ${new Date(m.ts).toLocaleTimeString('de-CH', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Zurich' })}</small>${esc(m.text)}</div></div>`; }).join('')
+    : '<div class="hint" style="color:var(--muted)">Noch keine Nachrichten – feuere dein Team an! 🏁</div>';
+  L.scrollTop = L.scrollHeight;
+}
+function openChat() {
+  if (!meId) return openJoin();
+  chatUnread = false; const b = $('#chatBtn'); b && b.classList.remove('unread');
+  $('#chatChips').innerHTML = CHAT_CHIPS.map(c => `<button type="button">${esc(c)}</button>`).join('');
+  $('#chatChips').querySelectorAll('button').forEach(x => x.onclick = () => { $('#chatIn').value = x.textContent; chatCount(); $('#chatIn').focus(); });
+  renderChat(); $('#dChat').showModal(); chatCount();
+}
+const chatLen = s => Array.from(s).length;
+function chatCount() { const n = chatLen($('#chatIn').value); $('#chatCnt').textContent = n + '/30'; $('#chatCnt').style.color = n > 30 ? 'var(--red)' : 'var(--muted)'; }
+let chatBusy = false;
+async function sendChat() {
+  const t = $('#chatIn').value.replace(/\s+/g, ' ').trim(); if (!t || chatBusy || !meId) return;
+  if (chatLen(t) > 30) { toast('⚠️ Maximal 30 Zeichen'); return; }
+  chatBusy = true;
+  try { await api(`/api/people/${meId}/chat`, { method: 'POST', body: { text: t } }); $('#chatIn').value = ''; chatCount(); }
+  catch (e) { toast('⚠️ ' + e.message); }
+  finally { chatBusy = false; }
+}
+$('#chatIn').addEventListener('input', () => { const v = $('#chatIn').value; if (chatLen(v) > 30) $('#chatIn').value = Array.from(v).slice(0, 30).join(''); chatCount(); });
+$('#chatIn').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); sendChat(); } });
+$('#chatSend').onclick = sendChat;
+
 // ---------- Verbindung ----------
 let es, lastLive = 0, pollT = null, polling = false;
 // Ersatzweg für Firmennetze: Stand per normalem Abruf laden (Proxys blockieren oft Live-Verbindungen)
@@ -714,6 +783,7 @@ function applyState(ns, fromPoll) {
   const cnt = st => st ? st.entries.filter(e => e.personId === meId).reduce((a, e) => a + e.delta, 0) : 0, before = cnt(S);
   const had = S && meId && S.people.some(x => x.id === meId);
   S = ns; if (meId && !S.people.some(x => x.id === meId)) meId = null;
+  newChats();
   render();
   // Ohne Live-Verbindung: eigene Etappen/Belohnungen trotzdem feiern
   if (fromPoll && had && meId) { const after = cnt(S); if (after !== before) handleEvent({ type: after > before ? 'hit' : 'undo', personId: meId, before, after }); }

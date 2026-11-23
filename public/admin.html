@@ -149,7 +149,8 @@ function start() {
         <div><label for="nG">Ambitionsniveau</label><input class="field" id="nG" type="number" min="1" max="9999" required></div>
         <div><button class="btn pri" style="width:100%">+ Hinzufügen</button></div></form></div>
     <div class="cols">
-      <div class="panel"><h2>📜 Termin-Protokoll <span class="sp"></span><select class="field" id="lf2" style="width:auto"></select></h2><div class="log"><table class="tbl"><tbody id="log"></tbody></table></div></div>
+      <div class="panel"><h2>📜 Termin-Protokoll <span class="sp"></span><select class="field" id="lf2" style="width:auto"></select></h2><div class="log"><table class="tbl"><tbody id="log"></tbody></table></div>
+        <h2 style="margin-top:14px">💬 Kurz-Chat <span class="sp"></span><span class="muted" style="font-size:12px;font-weight:600">verschwindet nach 24 h</span></h2><div class="log" style="max-height:260px"><table class="tbl"><tbody id="chatLog"></tbody></table></div></div>
       <div>
         <div class="panel"><h2>⚙️ Einstellungen</h2><form id="setF" style="display:grid;gap:10px">
           <div><label for="sT">Titel</label><input class="field" id="sT" maxlength="50"></div>
@@ -214,7 +215,7 @@ function render() {
   const sel = $('#lf2'), cur = sel.value;
   sel.innerHTML = '<option value="">Alle Personen</option>' + list.map(x => `<option value="${x.id}">${esc(x.name)}</option>`).join(''); sel.value = cur;
   if (document.activeElement && !document.activeElement.closest('#setF')) { $('#sT').value = S.settings.title; $('#sS').value = S.settings.startDate; $('#sE').value = S.settings.endDate; $('#sC').value = S.settings.accessCode || ''; $('#sL').checked = S.settings.lockGoals !== false; $('#sQF').value = S.settings.quietFrom || ''; $('#sQT').value = S.settings.quietTo || ''; $('#sQW').checked = !!S.settings.quietWeekend; }
-  renderLog();
+  renderLog(); renderChatLog();
 }
 function renderLog() {
   const names = Object.fromEntries(S.people.map(p => [p.id, p.name]));
@@ -223,6 +224,13 @@ function renderLog() {
     <td>${esc(names[e.personId])}</td><td class="${e.delta > 0 ? 'pos' : 'neg'}">${e.delta > 0 ? '+' : ''}${e.delta}</td>
     <td class="muted">${e.by === 'admin' ? 'Rennleitung' : 'selbst'}</td><td style="text-align:right"><button class="btn sm danger" data-e="${e.id}" title="Eintrag löschen">✕</button></td></tr>`).join('') || '<tr><td class="muted">Noch keine Einträge.</td></tr>';
   $('#log').querySelectorAll('[data-e]').forEach(b => b.onclick = async () => { if (!confirm('Diesen Eintrag löschen?')) return; try { await api('/api/admin/entries/' + b.dataset.e, { method: 'DELETE' }); toast('Eintrag gelöscht'); } catch (err) { toast('⚠️ ' + err.message); } });
+}
+function renderChatLog() {
+  const names = Object.fromEntries(S.people.map(p => [p.id, p.name]));
+  const ms = (S.messages || []).filter(m => names[m.personId]).slice().reverse();
+  $('#chatLog').innerHTML = ms.map(m => `<tr><td class="muted" style="white-space:nowrap">${new Date(m.ts).toLocaleString('de-CH', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</td>
+    <td>${esc(names[m.personId])}</td><td>${esc(m.text)}</td><td style="text-align:right"><button class="btn sm danger" data-m="${m.id}" title="Nachricht löschen">✕</button></td></tr>`).join('') || '<tr><td class="muted">Keine Nachrichten in den letzten 24 Stunden.</td></tr>';
+  $('#chatLog').querySelectorAll('[data-m]').forEach(b => b.onclick = async () => { if (!confirm('Diese Nachricht löschen?')) return; try { await api('/api/admin/messages/' + b.dataset.m, { method: 'DELETE' }); toast('Nachricht gelöscht'); } catch (err) { toast('⚠️ ' + err.message); } });
 }
 function bindRows() {
   document.querySelectorAll('#rows tr[data-id]').forEach(tr => {

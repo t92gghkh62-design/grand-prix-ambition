@@ -832,9 +832,12 @@
         const medal = r.rank === 1 ? '🥇 ' : r.rank === 2 ? '🥈 ' : r.rank === 3 ? '🥉 ' : r.rank ? r.rank + '. ' : '';
         r.label.innerHTML = `<b style="background:${x.look.suit || '#3a86ff'};color:${ink(x.look.suit || '#3a86ff')}">${esc(x.look.initials || initials(x.name))}</b><span>${medal}${Math.round(x.pct * 100)}%</span>`;
       });
-      for (const [id, r] of this.racers) if (!seen.has(id)) { r.label.remove(); this.racers.delete(id); }
+      for (const [id, r] of this.racers) if (!seen.has(id)) { r.label.remove(); if (r.say) r.say.el.remove(); this.racers.delete(id); }
       this.meId = meId;
     }
+    // Kurz-Chat: Sprechblase über Fahrzeug bzw. Figur (12 s sichtbar)
+    say(id, text) { const r = this.racers.get(id); if (!r) return;
+      if (r.say) r.say.el.remove(); const el = document.createElement('div'); el.className = 'say'; el.textContent = text; this.layer.appendChild(el); r.say = { el, t: 0 }; }
     podFigure(look) { const f = Models.person(look, 'cheer'); f.scl = [1.05, 1.05, 1.05]; f.cull = 2.5; return f; }
     // Ausgestiegene Fahrer·innen: laufen vom geparkten Fahrzeug zu ihrem Platz auf dem Podest (Plätze tauschen live)
     updatePodium(t, dt) {
@@ -1077,8 +1080,9 @@
       // Beschriftungen
       const W = this.canvas.clientWidth, H = this.canvas.clientHeight;
       for (const r of this.racers.values()) { const rp = this.rp(r), s = this.r.project([rp[0], rp[1] + (r.fig ? 2.15 : 2.3 * (this.carScale || 1) + .35 + (r.li % 3) * .5), rp[2]]); const el = r.label;
-        if (!s || s[0] < -40 || s[0] > W + 40 || s[1] < -20 || s[1] > H + 20) { el.style.display = 'none'; if (r.pop) { r.pop.el.remove(); r.pop = null; } continue; }
+        if (!s || s[0] < -40 || s[0] > W + 40 || s[1] < -20 || s[1] > H + 20) { el.style.display = 'none'; if (r.pop) { r.pop.el.remove(); r.pop = null; } if (r.say) { r.say.t += dt; r.say.el.style.opacity = '0'; if (r.say.t > 12) { r.say.el.remove(); r.say = null; } } continue; }
         el.style.display = ''; el.style.transform = `translate(${s[0]}px,${s[1]}px) translate(-50%,-100%)`; el.style.zIndex = String(1000 - Math.round(s[2]));
+        if (r.say) { r.say.t += dt; const se = r.say.el; se.style.transform = `translate(${s[0]}px,${s[1] - 30}px) translate(-50%,-100%)`; se.style.zIndex = String(1001 - Math.round(s[2])); se.style.opacity = String(Math.max(0, Math.min(1, (12 - r.say.t) / .6))); if (r.say.t > 12) { se.remove(); r.say = null; } }
         if (r.pop) { r.pop.t += dt; const pe = r.pop.el; pe.style.transform = `translate(${s[0]}px,${s[1] - 26 - r.pop.t * 40}px) translate(-50%,-100%)`; pe.style.opacity = String(Math.max(0, 1 - r.pop.t / 1.3)); if (r.pop.t > 1.3) { pe.remove(); r.pop = null; } } }
       this.placeTag('signs', this.signs);
       const sq = this.path.at(START_T - .012), fq = this.path.at(FINISH_T);

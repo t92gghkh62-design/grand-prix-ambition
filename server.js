@@ -16,8 +16,14 @@ const PUBLIC = path.join(__dirname, 'public');
 const defaultState = () => ({
   settings: { title: 'Grand Prix Ambition 2026', startDate: '2026-10-15', endDate: '2026-12-24', accessCode: '', lockGoals: true, quietFrom: '19:00', quietTo: '08:00', quietWeekend: true },
   people: [],   // {id, name, goal, look, createdAt}
-  entries: []   // {id, personId, ts, delta, by}
+  entries: [],  // {id, personId, ts, delta, by}
+  messages: []  // Kurz-Chat {id, personId, ts, text} – max. 30 Zeichen, verschwindet nach 24 h
 });
+const CHAT_MAX = 30, CHAT_KEEP_MS = 24 * 3600e3, CHAT_LIST = 60;
+// Kurz-Chat: alte Nachrichten (älter als 24 h) und Nachrichten entfernter Personen wegräumen
+const pruneChat = () => { const lim = Date.now() - CHAT_KEEP_MS, ids = new Set(state.people.map(p => p.id));
+  state.messages = (state.messages || []).filter(m => ids.has(m.personId) && Date.parse(m.ts) > lim).slice(-CHAT_LIST); };
+const cleanChat = s => Array.from(String(s || '').normalize('NFC').replace(/[\t\n\r\f\v]/g, ' ').replace(/[\u0000-\u001f\u007f-\u009f\u200b-\u200f\u2028-\u202e\u2066-\u2069]/g, '').replace(/\s+/g, ' ').trim()).slice(0, CHAT_MAX).join('').trim();
 
 // ---------- Speicher ----------
 // Reihenfolge: Upstash Redis (UPSTASH_REDIS_REST_URL + _TOKEN) → Postgres (DATABASE_URL) → Datei data.json
@@ -80,7 +86,7 @@ function save() { state.rev = Math.max(Date.now(), (state.rev || 0) + 1); dirty 
 for (const sig of ['SIGTERM', 'SIGINT']) process.on(sig, async () => { clearTimeout(saveTimer); try { await flush(); } finally { process.exit(0); } });
 
 // Öffentliche Sicht: ohne Zugangscode
-const publicState = () => ({ ...state, settings: { ...state.settings, accessCode: undefined } });
+const publicState = () => { pruneChat(); return { ...state, settings: { ...state.settings, accessCode: undefined } }; };
 const accessCode = () => state.settings.accessCode || ENV_ACCESS_CODE;
 
 // ---------- Live-Updates (Server-Sent Events) ----------
@@ -318,11 +324,20 @@ const server = http.createServer(async (req, res) => {
     const r = addPerson(await body(req));
     return r.error ? send(res, r.code || 400, { error: r.error }) : send(res, 201, r.person);
   }
-  let m = p.match(/^\/api\/people\/([a-f0-9]+)(\/termin)?$/);
+  let m = p.match(/^\/api\/people\/([a-f0-9]+)(\/termin|\/chat)?$/);
   if (m) {
     const person = state.people.find(x => x.id === m[1]);
     if (!person) return send(res, 404, { error: 'Person nicht gefunden' });
-    if (m[2] && req.method === 'POST') {              // Termin +1 / -1
+    if (m[2] === '/chat' && req.method === 'POST') {  // Kurz-Chat (max. 30 Zeichen, 1 Nachricht pro 10 s)
+      const text = cleanChat((await body(req)).text);
+      if (!text) return send(res, 400, { error: 'Bitte eine Nachricht eingeben' });
+      pruneChat(); const last = state.messages.filter(x => x.personId === person.id).pop();
+      if (last && Date.now() - Date.parse(last.ts) < 10e3) return send(res, 429, { error: 'Kurz warten – max. 1 Nachricht pro 10 Sekunden' });
+      const msg = { id: id(), personId: person.id, ts: new Date().toISOString(), text };
+      state.messages.push(msg); pruneChat(); save(); broadcast({ type: 'chat', personId: person.id, msgId: msg.id });
+      return send(res, 200, msg);
+    }
+    if (m[2] === '/termin' && req.method === 'POST') {              // Termin +1 / -1
       const b = await body(req);
       const delta = b.delta === -1 ? -1 : 1;
       const before = count(person.id);
@@ -338,7 +353,7 @@ const server = http.createServer(async (req, res) => {
   if (!p.startsWith('/api/admin/')) return send(res, 404, { error: 'Unbekannt' });
   if (!isAdmin(req)) return send(res, 403, { error: 'Bitte als Rennleitung anmelden' });
 
-  if (p === '/api/admin/state') return send(res, 200, state);
+  if (p === '/api/admin/state') { pruneChat(); return send(res, 200, state); }
   if (p === '/api/admin/people' && req.method === 'POST') {
     const r = addPerson(await body(req));
     return r.error ? send(res, r.code || 400, { error: r.error }) : send(res, 201, r.person);
@@ -364,6 +379,14 @@ const server = http.createServer(async (req, res) => {
       save(); broadcast({ type: 'remove' });
       return send(res, 200, { ok: true });
     }
+  }
+  m = p.match(/^\/api\/admin\/messages\/([a-f0-9]+)$/);
+  if (m && req.method === 'DELETE') {               // Rennleitung löscht eine Chat-Nachricht
+    const before = (state.messages || []).length;
+    state.messages = (state.messages || []).filter(x => x.id !== m[1]);
+    if (state.messages.length === before) return send(res, 404, { error: 'Nachricht nicht gefunden' });
+    save(); broadcast({ type: 'chat-removed' });
+    return send(res, 200, { ok: true });
   }
   m = p.match(/^\/api\/admin\/entries\/([a-f0-9]+)$/);
   if (m && req.method === 'DELETE') {
