@@ -85,9 +85,20 @@ const mkIni = n => String(n || '').split(/\s+/).map(w => w[0] || '').join('').sl
 const parseD = s => { const [y,m,d] = s.split('-').map(Number); return new Date(y, m-1, d); };
 let token = ss.get('gp_admin'), S = null, es = null, defaultLogin = ss.get('gp_admin_def') === '1', logFilter = '';
 
+// Firmennetz-fest: Token auch in der Adresse, nur GET/POST, Ersatzweg über GET, wenn der Proxy blockiert
+const wt = u => u + (u.includes('?') ? '&' : '?') + 'token=' + encodeURIComponent(token || '');
+let viaGet = false;
 async function api(path, opt = {}) {
-  const r = await fetch(path, { method: opt.method || 'GET', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token }, body: opt.body ? JSON.stringify(opt.body) : undefined });
-  const j = await r.json().catch(() => ({}));
+  const m = opt.method || 'GET', bodyTxt = opt.body ? JSON.stringify(opt.body) : undefined;
+  const headers = { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token };
+  const send = alt => alt ? fetch(wt('/api/do?' + new URLSearchParams({ m, p: path, b: bodyTxt || '{}' })), { headers: { Authorization: 'Bearer ' + token }, cache: 'no-store' })
+    : fetch(wt(m === 'PATCH' || m === 'DELETE' ? path + (path.includes('?') ? '&' : '?') + '_method=' + m : path), { method: m === 'GET' ? 'GET' : 'POST', headers: m === 'GET' ? headers : { ...headers, 'X-HTTP-Method-Override': m }, body: bodyTxt, cache: 'no-store' });
+  let r = null, j = null;
+  try { r = await send(viaGet && m !== 'GET'); j = await r.json().catch(() => null); } catch {}
+  if (m !== 'GET' && !viaGet && (!r || !j)) { try { r = await send(true); j = await r.json().catch(() => null); if (r && j) viaGet = true; } catch { r = null; } }
+  if (!r) throw new Error('Keine Verbindung zum Server – blockiert das Firmennetz die Seite?');
+  if (!j) throw new Error(`Das Firmennetz hat die Anfrage blockiert (Status ${r.status})`);
+  if (m !== 'GET') setTimeout(loadState, 120);
   if (r.status === 403 || r.status === 401) { logout(true); throw new Error(j.error || 'Bitte neu anmelden'); }
   if (!r.ok) throw new Error(j.error || 'Fehler');
   return j;
@@ -109,7 +120,7 @@ function showLogin(msg) {
     if (!r.ok) { $('#err').textContent = j.error || 'Anmeldung fehlgeschlagen'; return; }
     token = j.token; ss.set('gp_admin', token); defaultLogin = !!j.defaultLogin; ss.set('gp_admin_def', defaultLogin ? '1' : '0'); start(); };
 }
-function logout(expired) { if (es) es.close(); if (token && !expired) fetch('/api/admin/logout', { method: 'POST', headers: { Authorization: 'Bearer ' + token } }); token = null; ss.set('gp_admin', null); showLogin(expired ? 'Sitzung abgelaufen – bitte neu anmelden.' : ''); }
+function logout(expired) { if (es) es.close(); if (typeof pollT !== 'undefined') clearInterval(pollT); if (token && !expired) fetch('/api/admin/logout', { method: 'POST', headers: { Authorization: 'Bearer ' + token } }); token = null; ss.set('gp_admin', null); showLogin(expired ? 'Sitzung abgelaufen – bitte neu anmelden.' : ''); }
 
 // ---------- Daten ----------
 function compute() {
@@ -229,11 +240,19 @@ function bindRows() {
       try { await api('/api/admin/people/' + id, { method: 'DELETE' }); toast('Gelöscht'); } catch (e) { toast('⚠️ ' + e.message); } };
   });
 }
+// Stand per normalem Abruf laden (Live-Verbindung wird von Firmen-Proxys oft blockiert), danach leichter Abgleich alle 5 s
+let pollT = null, loading = false;
+function applyState(ns) { if (S && S.rev && ns.rev && ns.rev < S.rev) return; S = ns; render(); }
+async function loadState() { if (loading || !token) return; loading = true;
+  try { const r = await fetch(wt('/api/admin/state'), { headers: { Authorization: 'Bearer ' + token }, cache: 'no-store' });
+    if (r.status === 403 || r.status === 401) { logout(true); return; } const j = await r.json().catch(() => null); if (j && j.people) applyState(j); } catch {} finally { loading = false; } }
 function connect() {
   if (es) es.close();
+  loadState(); clearInterval(pollT);
+  pollT = setInterval(async () => { if (document.hidden || !token) return; try { const r = await fetch(wt('/api/rev'), { headers: { Authorization: 'Bearer ' + token }, cache: 'no-store' }); const j = await r.json(); if (!S || (j.rev || 0) > (S.rev || 0)) loadState(); } catch {} }, 5000);
   es = new EventSource('/api/stream?token=' + encodeURIComponent(token));
-  es.onmessage = m => { S = JSON.parse(m.data).state; if (S.settings.accessCode === undefined) { /* keine Admin-Sicht */ } render(); };
-  es.onerror = async () => { try { const r = await fetch('/api/admin/state', { headers: { Authorization: 'Bearer ' + token } }); if (r.status === 403) { es.close(); logout(true); } } catch {} };
+  es.onmessage = m => { applyState(JSON.parse(m.data).state); };
+  es.onerror = async () => { try { const r = await fetch(wt('/api/admin/state'), { headers: { Authorization: 'Bearer ' + token } }); if (r.status === 403) { es.close(); logout(true); } } catch {} };
 }
 if (token) start(); else showLogin();
 })();

@@ -255,11 +255,11 @@ const server = http.createServer(async (req, res) => {
   // Firmennetze: manche Proxys lassen nur GET/POST durch. Ersatzwege:
   //  · POST mit X-HTTP-Method-Override (PATCH/DELETE)
   //  · GET /api/do?m=POST&p=/api/...&b={json} (wenn sogar POST blockiert wird)
-  const ov = String(req.headers['x-http-method-override'] || '').toUpperCase();
+  const ov = String(req.headers['x-http-method-override'] || url.searchParams.get('_method') || '').toUpperCase();
   if (req.method === 'POST' && (ov === 'PATCH' || ov === 'DELETE')) req.method = ov;
   if (p === '/api/do' && req.method === 'GET') {
     const m = String(url.searchParams.get('m') || '').toUpperCase(), p2 = String(url.searchParams.get('p') || '');
-    if (!['POST', 'PATCH', 'DELETE'].includes(m) || !/^\/api\/(people|admin)\//.test(p2 + '/') || !hasAccess(req) && !req.headers.authorization) return send(res, 400, { error: 'Ungültig' });
+    if (!['POST', 'PATCH', 'DELETE'].includes(m) || !/^\/api\/(people|admin)\//.test(p2 + '/') || !hasAccess(req) && !isAdmin(req)) return send(res, 400, { error: 'Ungültig' });
     try { req._body = JSON.parse(url.searchParams.get('b') || '{}'); } catch { req._body = {}; }
     req.method = m; p = p2; res._path = '/api/do→' + p2;
   }
@@ -357,7 +357,7 @@ const server = http.createServer(async (req, res) => {
       save(); broadcast({ type: delta > 0 ? 'hit' : 'undo', personId: person.id, before, after: before + delta, admin: true });
       return send(res, 200, { count: before + delta });
     }
-    if (!m[2] && req.method === 'PATCH') { editPerson(person, await body(req), true); return send(res, 200, person); }
+    if (!m[2] && (req.method === 'PATCH' || req.method === 'POST')) { editPerson(person, await body(req), true); return send(res, 200, person); }
     if (!m[2] && req.method === 'DELETE') {
       state.people = state.people.filter(x => x.id !== person.id);
       state.entries = state.entries.filter(e => e.personId !== person.id);
