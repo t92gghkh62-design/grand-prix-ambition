@@ -369,6 +369,7 @@ const ink = c => { const n = parseInt((c || '#3a86ff').slice(1), 16), r = n >> 1
 const badge = (look, name, cls = 'badge') => `<span class="${cls}" style="background:${look.suit};color:${ink(look.suit)}">${esc(look.initials || mkIni(name))}</span>`;
 function weekStart(t){ const d = new Date(t); d.setHours(0,0,0,0); d.setDate(d.getDate() - ((d.getDay()+6)%7)); return d.getTime(); }
 
+const wc = u => code ? u + (u.includes('?') ? '&' : '?') + 'code=' + encodeURIComponent(code) : u;   // Team-Code auch in der Adresse (falls der Proxy Zusätze entfernt)
 let viaGet = false;   // merkt sich, wenn nur der Ersatzweg funktioniert
 async function api(path, opt = {}) {
   const headers = { 'Content-Type': 'application/json' };
@@ -376,8 +377,8 @@ async function api(path, opt = {}) {
   const m = opt.method || 'GET', bodyTxt = opt.body ? JSON.stringify(opt.body) : undefined;
   if (m === 'PATCH' || m === 'DELETE') headers['X-HTTP-Method-Override'] = m;   // Proxys lassen oft nur GET/POST durch
   const send = async alt => {
-    if (alt) { const q = new URLSearchParams({ m, p: path, b: bodyTxt || '{}' }); return fetch('/api/do?' + q, { headers: code ? { 'x-access-code': code } : {}, cache: 'no-store' }); }
-    return fetch(path, { method: m === 'GET' ? 'GET' : 'POST', headers, body: bodyTxt });
+    if (alt) { const q = new URLSearchParams({ m, p: path, b: bodyTxt || '{}' }); return fetch(wc('/api/do?' + q), { headers: code ? { 'x-access-code': code } : {}, cache: 'no-store' }); }
+    return fetch(wc(path), { method: m === 'GET' ? 'GET' : 'POST', headers, body: bodyTxt });
   };
   let r, j = null;
   try { r = await send(viaGet && m !== 'GET'); j = await r.json().catch(() => null); } catch (e) { r = null; }
@@ -719,14 +720,14 @@ function applyState(ns, fromPoll) {
 }
 async function loadState() {
   if (polling) return; polling = true;
-  try { const r = await fetch('/api/state', { headers: code ? { 'x-access-code': code } : {}, cache: 'no-store' });
+  try { const r = await fetch(wc('/api/state'), { headers: code ? { 'x-access-code': code } : {}, cache: 'no-store' });
     if (r.status === 401) { askCode(); return; }
     if (!r.ok) return;
     applyState(await r.json(), true); $('#offline').style.display = 'none';
   } catch {} finally { polling = false; }
 }
 function startPoll() { clearInterval(pollT); pollT = setInterval(async () => { if (sleeping || document.hidden) return;
-  try { const r = await fetch('/api/rev', { headers: code ? { 'x-access-code': code } : {}, cache: 'no-store' }); if (!r.ok) return;
+  try { const r = await fetch(wc('/api/rev'), { headers: code ? { 'x-access-code': code } : {}, cache: 'no-store' }); if (!r.ok) return;
     const { rev } = await r.json(); if (!S || (rev || 0) > (S.rev || 0)) loadState(); } catch {} }, 5000); }
 function connect() {
   if (es) es.close();
@@ -735,7 +736,7 @@ function connect() {
   es.onmessage = m => { lastLive = Date.now(); $('#offline').style.display = 'none'; const d = JSON.parse(m.data);
     if (applyState(d.state)) handleEvent(d.event); };
   es.onerror = async () => { $('#offline').style.display = 'block';
-    try { const r = await fetch('/api/state', { headers: code ? { 'x-access-code': code } : {} }); if (r.status === 401) { es.close(); $('#offline').style.display = 'none'; askCode(); } } catch {} };   // Code fehlt: kein «Verbindung unterbrochen»
+    try { const r = await fetch(wc('/api/state'), { headers: code ? { 'x-access-code': code } : {} }); if (r.status === 401) { es.close(); $('#offline').style.display = 'none'; askCode(); } } catch {} };   // Code fehlt: kein «Verbindung unterbrochen»
 }
 setTab(tab);
 connect();

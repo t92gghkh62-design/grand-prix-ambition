@@ -161,7 +161,11 @@ async function weather() {
 // ---------- Helfer ----------
 const id = () => crypto.randomBytes(6).toString('hex');
 const clean = (s, n) => String(s || '').replace(/[<>]/g, '').trim().slice(0, n);
-function send(res, code, obj) { res.writeHead(code, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' }); res.end(JSON.stringify(obj)); }
+function send(res, code, obj) {
+  const q = res._req;   // abgelehnte Anfragen protokollieren (hilft bei Firmennetz-Problemen)
+  if (q && code >= 400 && !(code === 401 && q.method === 'GET')) { const ua = String(q.headers['user-agent'] || ''), dev = /Mobile|Android|iPhone/.test(ua) ? 'Handy' : 'PC', br = (ua.match(/(Edg|Chrome|Firefox|Safari)\/[\d]+/) || [''])[0];
+    console.log(`⚠️ ${code} ${q._orig || q.method}→${q.method} ${res._path} · ${dev} ${br} · ${obj && obj.error || ''}`); }
+  res.writeHead(code, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' }); res.end(JSON.stringify(obj)); }
 function body(req) {
   if (req._body) return Promise.resolve(req._body);
   return new Promise((resolve) => {
@@ -247,6 +251,7 @@ const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; cha
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, 'http://x');
   let p = url.pathname;
+  res._req = req; res._path = p; req._orig = req.method;
   // Firmennetze: manche Proxys lassen nur GET/POST durch. Ersatzwege:
   //  · POST mit X-HTTP-Method-Override (PATCH/DELETE)
   //  · GET /api/do?m=POST&p=/api/...&b={json} (wenn sogar POST blockiert wird)
@@ -254,9 +259,9 @@ const server = http.createServer(async (req, res) => {
   if (req.method === 'POST' && (ov === 'PATCH' || ov === 'DELETE')) req.method = ov;
   if (p === '/api/do' && req.method === 'GET') {
     const m = String(url.searchParams.get('m') || '').toUpperCase(), p2 = String(url.searchParams.get('p') || '');
-    if (!['POST', 'PATCH', 'DELETE'].includes(m) || !/^\/api\/(people|admin)\//.test(p2 + '/') || !req.headers['x-access-code'] && !req.headers.authorization) return send(res, 400, { error: 'Ungültig' });
+    if (!['POST', 'PATCH', 'DELETE'].includes(m) || !/^\/api\/(people|admin)\//.test(p2 + '/') || !hasAccess(req) && !req.headers.authorization) return send(res, 400, { error: 'Ungültig' });
     try { req._body = JSON.parse(url.searchParams.get('b') || '{}'); } catch { req._body = {}; }
-    req.method = m; p = p2;
+    req.method = m; p = p2; res._path = '/api/do→' + p2;
   }
 
   if (!p.startsWith('/api/')) {
@@ -326,7 +331,7 @@ const server = http.createServer(async (req, res) => {
       save(); broadcast({ type: delta > 0 ? 'hit' : 'undo', personId: person.id, before, after: before + delta });
       return send(res, 200, { count: before + delta });
     }
-    if (!m[2] && req.method === 'PATCH') { editPerson(person, await body(req), false); return send(res, 200, person); }
+    if (!m[2] && (req.method === 'PATCH' || req.method === 'POST')) { editPerson(person, await body(req), false); return send(res, 200, person); }
   }
 
   // --- Ab hier nur Rennleitung ---
