@@ -325,33 +325,56 @@
   // ---- Planung: freie Plätze suchen (vor dem Baumpflanzen) ----
   Fo.prototype.planScenes = function (P) {
     const PD = this.pond, MS = this.massif, F = this.farm, CS = this.crowdSpots, A = this.arena;
-    const free = (x, z, r) => !(PD && Math.hypot(x - PD.x, z - PD.z) < PD.r + r + 2) && !(MS && Math.hypot(x - MS.x, z - MS.z) < MS.R + r + 2)
+    const free = (x, z, r, np) => !(!np && PD && Math.hypot(x - PD.x, z - PD.z) < PD.r + r + 2) && !(MS && Math.hypot(x - MS.x, z - MS.z) < MS.R + r + 2)
       && !(F && Math.hypot(x - F.x, z - F.z) < 17 + r) && !CS.some(c => Math.hypot(c.x - x, c.z - z) < r + 6) && !(A && A.members.some(m => Math.hypot(m.x - x, m.z - z) < r + 4));
-    // Bach: von einer Quelle ins Teich-Ufer, mit leichten Schlaufen, nie über den Pfad
+    // Bach: läuft als Überlauf AUS dem Teich und fliesst nur bergab (Wasserspiegel sinkt stetig)
     this.stream = null;
-    if (PD) { let best = null;
-      for (let a = 0; a < PI * 2; a += PI / 36) for (const L of [24, 28, 32]) {
-        const sx = PD.x + Math.cos(a) * (PD.r + L), sz = PD.z + Math.sin(a) * (PD.r + L), ex = PD.x + Math.cos(a) * (PD.r - .6), ez = PD.z + Math.sin(a) * (PD.r - .6);
-        const pts = [], n = Math.ceil(L / .9), px = -Math.sin(a), pz = Math.cos(a); let ok = true, dsum = 0;
-        for (let i = 0; i <= n; i++) { const f = i / n, w = Math.sin(f * PI * 2.3) * 1.6 * Math.sin(f * PI), x = sx + (ex - sx) * f + px * w, z = sz + (ez - sz) * f + pz * w; pts.push([x, z]);
-          const d = P.dist(x, z); dsum += d; if (d < 7.5 || (f < .82 && !free(x, z, 1.2))) { ok = false; break; } }
-        if (!ok) continue; const mid = pts[Math.round(n * .45)], mp = P.dist(mid[0], mid[1]);
-        if (mp < 11 || !free(mid[0], mid[1], 5)) continue;
-        const sc = Math.abs(mp - 14) + Math.abs(L - 28) * .2; if (!best || sc < best.sc) best = { pts, sc, mi: Math.round(n * .45) }; }
-      if (best) { const i = best.mi, a0 = best.pts[i], a1 = best.pts[i + 1], dx = a1[0] - a0[0], dz = a1[1] - a0[1], l = Math.hypot(dx, dz) || 1;
-        best.millAt = [a0[0] - dz / l * 3.4, a0[1] + dx / l * 3.4]; }
+    const H = this.height;
+    if (PD && H) { let best = null;
+      for (let a = 0; a < PI * 2; a += PI / 48) for (const L of [22, 26, 30, 34]) {
+        const sx = PD.x + Math.cos(a) * (PD.r - .4), sz = PD.z + Math.sin(a) * (PD.r - .4), ex = PD.x + Math.cos(a) * (PD.r + L), ez = PD.z + Math.sin(a) * (PD.r + L);
+        const pts = [], wl = [], n = Math.ceil(L / .9), px = -Math.sin(a), pz = Math.cos(a); let ok = true, rise = 0, w = 0;
+        for (let i = 0; i <= n; i++) { const f = i / n, mw = Math.sin(f * PI * 2.3) * 1.6 * Math.sin(f * PI), x = sx + (ex - sx) * f + px * mw, z = sz + (ez - sz) * f + pz * mw, h = H(x, z);
+          const d = P.dist(x, z); if (d < 7.5 || !free(x, z, 1.2, true)) { ok = false; break; }
+          pts.push([x, h, z]); }
+        if (!ok) continue;
+        // Überlauf auf der Uferkante (erste 15 %), danach sinkt der Wasserspiegel nur noch
+        // Wasserspiegel: am Ufer auf Teichhöhe, danach nur noch sinkend; wo das Gelände höher ist, gräbt der Bach sein Bett
+        const k0 = Math.max(1, Math.round(n * .12)), wTop = PD.y - .02, wEnd = Math.min(pts[n][1] + .08, wTop - 1.1);
+        let carve = 0, carveMax = 0;
+        for (let i = 0; i <= n; i++) { const f = i <= k0 ? 0 : (i - k0) / (n - k0), lin = wTop + (wEnd - wTop) * f;
+          w = i ? Math.min(w, lin, pts[i][1] + .08) : wTop; wl.push(w);   // nie höher als vorher, folgt Senken, sinkt mindestens linear
+          const c = Math.max(0, pts[i][1] + .08 - w); carve += c; carveMax = Math.max(carveMax, c); }
+        rise = carveMax; if (carveMax > 2.4) continue;
+        const drop = wl[0] - wl[wl.length - 1], mi = Math.round(n * .5), mid = pts[mi], mp = P.dist(mid[0], mid[2]);
+        if (drop < .8 || mp < 11 || !free(mid[0], mid[2], 5)) continue;
+        const sc = Math.abs(mp - 14) - drop * .6 + Math.abs(L - 28) * .1 + carve * .08 + carveMax * 1.5; if (!best || sc < best.sc) best = { pts, wl, sc, mi }; }
+      if (best) { const i = best.mi, a0 = best.pts[i], a1 = best.pts[i + 1], dx = a1[0] - a0[0], dz = a1[2] - a0[2], l = Math.hypot(dx, dz) || 1;
+        best.millAt = [a0[0] - dz / l * 3.4, a0[2] + dx / l * 3.4]; }
       this.stream = best; }
     // Spielwiese: Dart-Ecke und Pingpong-Tisch auf einer Lichtung
     this.games = null; { let best = null;
       for (let x = -56; x <= 56; x += 2) for (let z = -70; z <= 40; z += 2) { const d = P.dist(x, z); if (d < 13 || d > 19 || !free(x, z, 8)) continue;
-        if (this.stream && this.stream.pts.some(p => Math.hypot(p[0] - x, p[1] - z) < 11)) continue;
+        if (this.stream && this.stream.pts.some(p => Math.hypot(p[0] - x, p[2] - z) < 11)) continue;
         const sc = Math.hypot(x * .8, z + 10); if (!best || sc < best.sc) best = { x, z, sc }; }
       if (best) { let bt = 0, bd = 1e9; for (let i = 0; i <= 300; i++) { const q = P.at(i / 300), dd = Math.hypot(q.p[0] - best.x, q.p[2] - best.z); if (dd < bd) { bd = dd; bt = i / 300; } }
         const q = P.at(bt), V = [(q.p[0] - best.x) / bd, (q.p[2] - best.z) / bd], U = [V[1], -V[0]];
         this.games = { x: best.x, z: best.z, U, V, w: (u, v) => [best.x + U[0] * u + V[0] * v, best.z + U[1] * u + V[1] * v] }; } }
   };
+  // Bachbett: senkt das Gelände entlang des Bachs bis unter den Wasserspiegel (nur nach unten, weicher Übergang)
+  Fo.prototype.streamCarve = function (x, z, h) {
+    const S = this.stream; if (!S) return h;
+    if (!S.bb) { let a = [1e9, 1e9, -1e9, -1e9]; for (const p of S.pts) a = [Math.min(a[0], p[0]), Math.min(a[1], p[2]), Math.max(a[2], p[0]), Math.max(a[3], p[2])]; S.bb = [a[0] - 8, a[1] - 8, a[2] + 8, a[3] + 8]; }
+    if (x < S.bb[0] || z < S.bb[1] || x > S.bb[2] || z > S.bb[3]) return h;
+    let bd = 1e9, bw = 0; const P = S.pts;
+    for (let i = 0; i < P.length - 1; i++) { const a = P[i], b = P[i + 1], ux = b[0] - a[0], uz = b[2] - a[2], L2 = ux * ux + uz * uz || 1, t = Math.max(0, Math.min(1, ((x - a[0]) * ux + (z - a[2]) * uz) / L2));
+      const d = Math.hypot(x - a[0] - ux * t, z - a[2] - uz * t); if (d < bd) { bd = d; bw = S.wl[i] + (S.wl[i + 1] - S.wl[i]) * t; } }
+    if (bd > 7) return h;
+    const bed = bw - .14, k = bd < 2 ? 0 : (bd - 2) / 5, s = k * k * (3 - 2 * k);
+    return Math.min(h, bed + (h - bed) * s + (bd < 2 ? 0 : 0));
+  };
   Fo.prototype.sceneReserved = function (x, z, r) {
-    if (this.stream && this.stream.pts.some(p => Math.hypot(p[0] - x, p[1] - z) < r + 2.6)) return true;
+    if (this.stream && this.stream.pts.some(p => Math.hypot(p[0] - x, p[2] - z) < r + 2.6)) return true;
     if (this.stream) { const m = this.stream.millAt; if (m && Math.hypot(m[0] - x, m[1] - z) < r + 9) return true; }
     return !!this.games && Math.hypot(this.games.x - x, this.games.z - z) < r + 8.5;
   };
@@ -361,26 +384,31 @@
     const W = this.season === 'winter', R = rng(4242); this.sceneDyn = []; this.sceneActors = [];
     const S = this.stream;
     if (S) {
-      const pts = S.pts.map(p => [p[0], height(p[0], p[1]), p[1]]), water = W ? '#cfe6f2' : '#3f93b8';
+      const pts = S.pts, WL = S.wl, water = W ? '#cfe6f2' : '#3f93b8';
       // Wasserband dem Gelände entlang, Ufer mit Kies und Steinen
       deco.add(new Node(G.custom(B => { for (let i = 0; i < pts.length - 1; i++) { const a = pts[i], b = pts[i + 1], dx = b[0] - a[0], dz = b[2] - a[2], l = Math.hypot(dx, dz) || 1, nx = -dz / l, nz = dx / l;
-        const w0 = .55 + i / pts.length * .45, w1 = .55 + (i + 1) / pts.length * .45, P2 = (p, w, e) => [p[0] + nx * w, p[1] + e, p[2] + nz * w];
+        const w0 = .55 + i / pts.length * .45, w1 = .55 + (i + 1) / pts.length * .45, P2 = (p, w, e) => [p[0] + nx * w, (p === a ? WL[i] : WL[i + 1]) - .1 + e * 0, p[2] + nz * w];
         B.tri(P2(a, -w0 - .5, .03), P2(b, -w1 - .5, .03), P2(b, w1 + .5, .03)); B.tri(P2(a, -w0 - .5, .03), P2(b, w1 + .5, .03), P2(a, w0 + .5, .03)); } }), W ? '#e4ebef' : '#8f8466'));
       const wn = new Node(G.custom(B => { for (let i = 0; i < pts.length - 1; i++) { const a = pts[i], b = pts[i + 1], dx = b[0] - a[0], dz = b[2] - a[2], l = Math.hypot(dx, dz) || 1, nx = -dz / l, nz = dx / l;
-        const w0 = .55 + i / pts.length * .45, w1 = .55 + (i + 1) / pts.length * .45, P2 = (p, w) => [p[0] + nx * w, p[1] + .08, p[2] + nz * w];
-        B.tri(P2(a, -w0), P2(b, -w1), P2(b, w1)); B.tri(P2(a, -w0), P2(b, w1), P2(a, w0)); } }), water, { emis: W ? .05 : .18 });
+        const w0 = .55 + i / pts.length * .45, w1 = .55 + (i + 1) / pts.length * .45, P2 = (p, w, y) => [p[0] + nx * w, y, p[2] + nz * w];
+        B.tri(P2(a, -w0, WL[i]), P2(b, -w1, WL[i + 1]), P2(b, w1, WL[i + 1])); B.tri(P2(a, -w0, WL[i]), P2(b, w1, WL[i + 1]), P2(a, w0, WL[i])); } }), water, { emis: W ? .05 : .18 });
       deco.add(wn);
       for (let i = 0; i < pts.length; i += 1) { if (R() < .35) continue; const a = pts[i], b = pts[Math.min(i + 1, pts.length - 1)], dx = b[0] - a[0], dz = b[2] - a[2], l = Math.hypot(dx, dz) || 1, sd = R() < .5 ? -1 : 1, w = .62 + i / pts.length * .45 + R() * .25;
-        const x = a[0] - dz / l * w * sd, z = a[2] + dx / l * w * sd, r = .12 + R() * .2; deco.add(N(G.sphere(r, 6, 4), W ? '#eef2f5' : ['#8d8a84', '#a5a29b', '#77736c'][i % 3], x, a[1] + r * .4, z).scale(1.3, .7, 1));
-        if (!W && R() < .25) for (let k = 0; k < 4; k++) deco.add(N(G.cyl(.012, .02, .7 + R() * .4, 4), '#6e8a3a', x + (R() - .5) * .3, a[1] + .35, z + (R() - .5) * .3));
+        const x = a[0] - dz / l * w * sd, z = a[2] + dx / l * w * sd, r = .12 + R() * .2, gy = Math.max(height(x, z), WL[i] - .05); deco.add(N(G.sphere(r, 6, 4), W ? '#eef2f5' : ['#8d8a84', '#a5a29b', '#77736c'][i % 3], x, gy + r * .4, z).scale(1.3, .7, 1));
+        if (!W && R() < .25) for (let k = 0; k < 4; k++) deco.add(N(G.cyl(.012, .02, .7 + R() * .4, 4), '#6e8a3a', x + (R() - .5) * .3, gy + .35, z + (R() - .5) * .3));
         this.addObs(a[0], a[2], .9); }
-      // Quelle mit Felsen
-      const q0 = pts[0]; for (let k = 0; k < 5; k++) { const ang = k * 1.3, r = .5 + R() * .4; deco.add(N(G.sphere(r, 7, 5), W ? '#e8eef2' : '#8a8780', q0[0] + Math.cos(ang) * 1.1, q0[1] + r * .5, q0[2] + Math.sin(ang) * 1.1).scale(1.2, .8, 1)); }
+      // Überlauf am Teich: zwei Steinreihen fassen den Abfluss, am Ende versickert der Bach im Schilf
+      { const a = pts[2], b = pts[3], dx = b[0] - a[0], dz = b[2] - a[2], l = Math.hypot(dx, dz) || 1;
+        for (const sd of [-1, 1]) for (let k = 0; k < 3; k++) { const r = .32 + R() * .15, o = 1.05 + k * .05; { const sx2 = a[0] - dz / l * o * sd + dx / l * (k - 1) * .7, sz2 = a[2] + dx / l * o * sd + dz / l * (k - 1) * .7; deco.add(N(G.sphere(r, 7, 5), W ? '#e8eef2' : '#8a8780', sx2, Math.max(height(sx2, sz2), WL[2] - .1) + r * .5, sz2).scale(1.2, .8, 1)); } }
+        deco.add(N(G.box(2.4, .16, .3), W ? '#e8eef2' : '#7d7a73', a[0], WL[2] - .04, a[2]).rotate(0, Math.atan2(-dz, dx) + PI / 2, 0)); }
+      { const e = pts[pts.length - 1].slice(); e[1] = WL[WL.length - 1]; deco.add(N(G.cyl(1.6, 1.6, .02, 14), water, e[0], WL[WL.length - 1] + .01, e[2], { emis: W ? .05 : .18 }));
+        if (!W) for (let k = 0; k < 16; k++) { const ang = R() * PI * 2, rr = 1.3 + R() * .6; deco.add(N(G.cyl(.012, .02, .8 + R() * .5, 4), '#6e8a3a', e[0] + Math.cos(ang) * rr, e[1] + .4, e[2] + Math.sin(ang) * rr)); }
+        for (let k = 0; k < 6; k++) { const ang = k * 1.05, r = .25 + R() * .2; deco.add(N(G.sphere(r, 6, 4), W ? '#eef2f5' : '#8d8a84', e[0] + Math.cos(ang) * 1.7, e[1] + r * .4, e[2] + Math.sin(ang) * 1.7).scale(1.3, .7, 1)); } }
       // Wassermühle am Bach
       const mi = S.mi, m0 = pts[mi], m1 = pts[mi + 1], dx = m1[0] - m0[0], dz = m1[2] - m0[2], l = Math.hypot(dx, dz) || 1, tx = dx / l, tz = dz / l, nx = -tz, nz = tx;
-      const hx = m0[0] + nx * 3.4, hz = m0[2] + nz * 3.4, hy = Math.min(height(hx, hz), m0[1]) - .05, house = new Node().at(hx, hy, hz); house.rot = [0, Math.atan2(-tz, tx), 0];
+      const hx = m0[0] + nx * 3.4, hz = m0[2] + nz * 3.4, hy = Math.max(WL[mi] + .25, Math.min(height(hx, hz), WL[mi] + .9)), house = new Node().at(hx, hy, hz); house.rot = [0, Math.atan2(-tz, tx), 0];
       S.mill = [hx, hz];
-      house.add(box(4.4, .5, 3.6, '#9a958c', 0, .25, 0), box(4.2, 2.6, 3.4, '#efe7d6', 0, 1.75, 0), box(4.24, .12, 3.44, '#7a4622', 0, 3.0, 0));
+      house.add(box(4.4, 2.5, 3.6, '#9a958c', 0, -.75, 0), box(4.2, 2.6, 3.4, '#efe7d6', 0, 1.75, 0), box(4.24, .12, 3.44, '#7a4622', 0, 3.0, 0));
       for (const xx of [-2.05, 2.05]) for (const zz of [-1.65, 1.65]) house.add(box(.16, 2.6, .16, '#6b4426', xx, 1.75, zz));
       house.add(box(4.2, .14, .06, '#6b4426', 0, 1.9, 1.71), box(4.2, .14, .06, '#6b4426', 0, 1.9, -1.71));
       const roof = G.custom(B => { const a = 2.7, b = 2.4, y0 = 3.0, y1 = 4.9; for (const sx of [-1, 1]) { const q = [[sx * 0 + 0, y1, -a], [0, y1, a], [0, y0, a], [0, y0, -a]];
@@ -392,11 +420,11 @@
       for (const xx of [-2.1, 2.1]) house.add(N(G.custom(B => { const t = [[xx, 3.0, -1.7], [xx, 3.0, 1.7], [xx, 4.55, 0]]; B.tri(...t); B.tri(t[0], t[2], t[1]); }), '#efe7d6'),
         box(.06, .5, .5, '#2a3d52', xx * 1.003, 3.55, 0));
       house.add(box(.9, 1.7, .06, '#6b4426', -.9, 1.35, 1.72), box(.7, .7, .06, '#2a3d52', 1.0, 2.0, 1.72), box(.7, .7, .06, '#2a3d52', 1.0, 2.0, -1.72), box(.5, 1.6, .5, '#bdb6aa', 1.3, 5.1, -.4));
-      house.add(box(.26, .26, 1.0, '#7a5532', 0, .95 + (m0[1] - hy), -2.2));   // Achse zum Rad
+      house.add(box(.26, .26, 1.0, '#7a5532', 0, WL[mi] + .85 - hy, -2.2));   // Achse zum Rad
       deco.add(house); this.addObs(hx, hz, 2.9);
       { const key = Math.floor(hx / 6) + ',' + Math.floor(hz / 6); let l2 = this.trees.get(key); if (!l2) this.trees.set(key, l2 = []); l2.push([hx, hz, 3.1, hy + 5.2]); }
       // Wasserrad (dreht sich) und Holzkanal
-      const wx = m0[0] + nx * .75, wz = m0[2] + nz * .75, wheel = new Node().at(wx, m0[1] + .95, wz), spin = new Node(null, null, { name: 'spin' }); wheel.rot = [0, Math.atan2(-tz, tx), 0];
+      const wx = m0[0] + nx * .75, wz = m0[2] + nz * .75, wheel = new Node().at(wx, WL[mi] + .85, wz), spin = new Node(null, null, { name: 'spin' }); wheel.rot = [0, Math.atan2(-tz, tx), 0];
       const rim = '#6b4426';
       spin.add(N(G.torus(1.25, .07, 22, 5), rim, 0, 0, .32), N(G.torus(1.25, .07, 22, 5), rim, 0, 0, -.32), N(G.cyl(.16, .16, .8, 8), '#4a3020').rotate(PI / 2, 0, 0));
       for (let k = 0; k < 12; k++) { const a = k / 12 * PI * 2; spin.add(N(G.box(.42, .06, .7), '#8a6a42', Math.cos(a) * 1.2, Math.sin(a) * 1.2, 0).rotate(0, 0, a), N(G.box(1.2, .05, .05), rim, Math.cos(a) * .6, Math.sin(a) * .6, .3).rotate(0, 0, a), N(G.box(1.2, .05, .05), rim, Math.cos(a) * .6, Math.sin(a) * .6, -.3).rotate(0, 0, a)); }
@@ -406,7 +434,7 @@
       // Strömung: kleine Schaumflocken treiben bachabwärts
       const foam = new Node(); foam.items = [];
       for (let k = 0; k < 34; k++) { const f = N(G.box(.18, .02, .1), '#ffffff', 0, 0, 0, { emis: .4 }); f.fs = R() * (pts.length - 1); f.fo = (R() - .5) * .8; foam.add(f); foam.items.push(f); }
-      foam.pts = pts; this.sceneDyn.push(foam); this.foam = foam;
+      foam.pts = pts.map((p, i) => [p[0], WL[i] - .08, p[2]]); this.sceneDyn.push(foam); this.foam = foam;
     }
     const Gm = this.games;
     if (Gm) {
@@ -445,7 +473,7 @@
 
   // ---- Bewegung ----
   Fo.prototype.updateScenes = function (t, dt) {
-    if (this.millWheel) this.millWheel.spin.rot = [0, 0, -t * .9];
+    if (this.millWheel) this.millWheel.spin.rot = [0, 0, t * .9];   // unterschlächtig: unten dreht das Rad mit dem Wasser
     if (this.foam) { const P = this.foam.pts, L = P.length - 1;
       for (const f of this.foam.items) { f.fs = (((f.fs + (dt > 0 ? dt : 0) * 1.6) % L) + L) % L; if (!(f.fs >= 0)) f.fs = 0; const i = Math.floor(f.fs), k = f.fs - i, a = P[i], b = P[Math.min(i + 1, L)], dx = b[0] - a[0], dz = b[2] - a[2], l = Math.hypot(dx, dz) || 1;
         f.pos = [a[0] + dx * k - dz / l * f.fo, a[1] + (b[1] - a[1]) * k + .1, a[2] + dz * k + dx / l * f.fo]; f.rot = [0, Math.atan2(-dz, dx), 0]; } }

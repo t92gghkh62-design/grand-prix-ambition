@@ -120,7 +120,6 @@
           const sc = Math.abs(x) * .6 + Math.abs(z + 5) * .5; if (!best || sc < best[2]) best = [x, z, sc]; }
         if (best) this.massif = { x: best[0], z: best[1], R: 11 }; }
       this.farm = null; if (this.planFarm) this.planFarm(P);
-      this.stream = this.games = null; if (this.planScenes) this.planScenes(P);
       const PD = this.pond;
       if (PD) this.addObs(PD.x, PD.z, PD.r + .3);
       const MS = this.massif;
@@ -128,10 +127,12 @@
       const baseH = (x, z) => { const d = P.dist(x, z), k = Math.min(1, Math.max(0, (d - 7) / 12));
         return k * (Math.sin(x * .08) * 2.2 + Math.cos(z * .07 + 1) * 1.8 + Math.sin((x + z) * .15) * .7 + 1.2); };
       if (this.farm) this.farm.level = baseH(this.farm.x, this.farm.z);
-      const height = (x, z) => { const h0 = this.farm ? this.farmHeight(x, z, baseH(x, z)) : baseH(x, z); if (!PD) return h0; const dp = Math.hypot(x - PD.x, z - PD.z); if (dp > PD.r + 7) return h0;
+      const height0 = (x, z) => { const h0 = this.farm ? this.farmHeight(x, z, baseH(x, z)) : baseH(x, z); if (!PD) return h0; const dp = Math.hypot(x - PD.x, z - PD.z); if (dp > PD.r + 7) return h0;
         if (dp < PD.r) return PD.y - .15 - 1.5 * (1 - (dp / PD.r) ** 2);
         const lvl = PD.y + .22; return lvl + (h0 - lvl) * smooth(PD.r, PD.r + 7, dp); };
+      const height = (x, z) => { const h = height0(x, z); return this.streamCarve ? this.streamCarve(x, z, h) : h; };   // Bachbett
       this.height = height;
+      this.stream = this.games = null; if (this.planScenes) this.planScenes(P);   // braucht das Gelände (Bach fliesst bergab)
       // Boden mit Farbverlauf
       const ground = G.custom(B => { const N = 64, S = 220, step = S / N, col = [];
         const c = (x, z) => { const d = P.dist(x, z), n = (Math.sin(x * .9) * Math.cos(z * .7) + Math.sin(x * .23 + z * .31)) * .5;

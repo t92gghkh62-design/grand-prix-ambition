@@ -267,6 +267,9 @@ dialog{max-height:calc(100svh - 24px);overflow:auto}
 .chip.locked{opacity:.45;cursor:not-allowed;position:relative}
 .chip.locked::after{content:'🔒';position:absolute;top:4px;right:6px;font-size:13px}
 @media (max-width:560px){.rew{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.topjoin{flex:none;height:40px;padding:0 16px;border-radius:12px;background:var(--go,#06d6a0);color:#062b1f;font-weight:900;font-size:15px;border:0;cursor:pointer;box-shadow:0 0 0 0 rgba(6,214,160,.6);animation:joinpulse 2s infinite}
+@keyframes joinpulse{70%{box-shadow:0 0 0 12px rgba(6,214,160,0)}100%{box-shadow:0 0 0 0 rgba(6,214,160,0)}}
+@media (prefers-reduced-motion:reduce){.topjoin{animation:none}}
 </style>
 </head>
 <body>
@@ -274,6 +277,7 @@ dialog{max-height:calc(100svh - 24px);overflow:auto}
 <div class="wrap">
   <div class="top">
     <div class="logo"><b class="disp" id="title">GRAND PRIX AMBITION</b><small id="subtitle"></small></div>
+    <button class="topjoin" id="topJoin" hidden>🏁 Einsteigen</button>
     <button class="ib" id="soundBtn" title="Ton an/aus">🔊</button>
     <a class="ib" href="/admin" title="Rennleitung (Backend)" aria-label="Rennleitung">⚙️</a>
   </div>
@@ -490,9 +494,14 @@ function renderBoard(ranked, p) {
   const feed = S.entries.filter(e => e.delta > 0 && names[e.personId]).slice(-10).reverse();
   $('#ticker').textContent = (() => { const it = tickerItems().slice(0, 10).map(i => i.html.replace(/<[^>]+>/g, '')); return it.length ? it.join('   ◆   ') : 'BOXENGASSE OFFEN – ERSTER TERMIN GESUCHT'; })();
 }
+let autoJoinDone = false;
 function renderDock(list) {
   const me = list.find(x => x.id === meId), d = $('#dock');
-  if (!me) { d.innerHTML = '<button class="join" id="joinBtn">🏁 Einsteigen / Ich bin …</button>'; $('#joinBtn').onclick = openJoin; return; }
+  $('#topJoin').hidden = !!me;
+  if (!me) { d.innerHTML = '<button class="join" id="joinBtn">🏁 Einsteigen / Ich bin …</button>'; $('#joinBtn').onclick = openJoin;
+    // Erster Besuch: Anmeldefenster öffnet sich von selbst (einmal pro Sitzung)
+    if (!autoJoinDone && !$('#dCode').open) { autoJoinDone = true; setTimeout(() => { if (!meId && !$('#dJoin').open && !$('#dCode').open) openJoin(); }, 900); }
+    return; }
   d.innerHTML = `<button class="undo" id="undoBtn" title="Letzten Termin korrigieren">↶</button>
     <button class="me-card" id="meCard">${badge(me.look, me.name)}<div class="t"><b>${esc(me.name)} · P${me.rank}</b>
       <span>${me.count}/${me.goal} · ${Math.round(me.pct * 100)} % · <span style="color:#ffe08a">${nextTxt(me)}</span></span></div></button>
@@ -610,6 +619,7 @@ async function hit(delta) {
   catch (e) { toast('⚠️ ' + e.message); }
   finally { setTimeout(() => busy = false, 400); }
 }
+$('#topJoin').onclick = () => openJoin();
 function openJoin() {
   const dl = $('#dJoin');
   $('#jEnd').textContent = parseD(S.settings.endDate).toLocaleDateString('de-CH');
