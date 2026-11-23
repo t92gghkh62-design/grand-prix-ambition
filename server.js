@@ -90,7 +90,7 @@ function broadcast(event) {
   const adm = `data: ${JSON.stringify({ state, event })}\n\n`;
   for (const c of clients) c.res.write(c.admin ? adm : pub);
 }
-setInterval(() => { for (const c of clients) c.res.write(': ping\n\n'); }, 25000);
+setInterval(() => { for (const c of clients) c.res.write(': ping\n\n'); }, 15000);
 
 // ---------- Rennleitung: Login & Sitzungen ----------
 const sessions = new Map();               // token → Ablaufzeit
@@ -289,6 +289,7 @@ const server = http.createServer(async (req, res) => {
   if (p === '/api/stream') {
     const admin = isAdmin(req);
     res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', Connection: 'keep-alive', 'X-Accel-Buffering': 'no' });
+    res.write(': ' + ' '.repeat(2048) + '\n\n');   // Polster: manche Firmen-Proxys geben Live-Daten erst nach 2 KB weiter
     res.write(`data: ${JSON.stringify({ state: admin ? state : publicState() })}\n\n`);
     const c = { res, admin }; clients.add(c); req.on('close', () => clients.delete(c));
     return;

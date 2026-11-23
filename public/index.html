@@ -376,6 +376,7 @@ async function api(path, opt = {}) {
   const j = await r.json().catch(() => ({}));
   if (r.status === 401) { askCode(); throw new Error('Zugangscode nötig'); }
   if (!r.ok) throw new Error(j.error || 'Fehler');
+  if ((opt.method || 'GET') !== 'GET' && Date.now() - lastLive > 12000) setTimeout(loadState, 150);   // ohne Live-Verbindung sofort nachladen
   return j;
 }
 
@@ -692,11 +693,24 @@ function handleEvent(ev) {
 }
 
 // ---------- Verbindung ----------
-let es;
+let es, lastLive = 0, pollT = null, polling = false;
+// Ersatzweg für Firmennetze: Stand per normalem Abruf laden (Proxys blockieren oft Live-Verbindungen)
+async function loadState() {
+  if (polling) return; polling = true;
+  try { const r = await fetch('/api/state', { headers: code ? { 'x-access-code': code } : {}, cache: 'no-store' });
+    if (r.status === 401) { askCode(); return; }
+    if (!r.ok) return;
+    S = await r.json(); $('#offline').style.display = 'none';
+    if (meId && !S.people.some(x => x.id === meId)) meId = null;
+    render();
+  } catch {} finally { polling = false; }
+}
+function startPoll() { clearInterval(pollT); pollT = setInterval(() => { if (!sleeping && Date.now() - lastLive > 12000) loadState(); }, 6000); }
 function connect() {
   if (es) es.close();
+  loadState(); startPoll();
   es = new EventSource('/api/stream' + (code ? '?code=' + encodeURIComponent(code) : ''));
-  es.onmessage = m => { $('#offline').style.display = 'none'; const d = JSON.parse(m.data); S = d.state;
+  es.onmessage = m => { lastLive = Date.now(); $('#offline').style.display = 'none'; const d = JSON.parse(m.data); S = d.state;
     if (meId && !S.people.some(x => x.id === meId)) meId = null;
     render(); handleEvent(d.event); };
   es.onerror = async () => { $('#offline').style.display = 'block';
