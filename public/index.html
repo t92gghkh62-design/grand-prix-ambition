@@ -369,13 +369,24 @@ const ink = c => { const n = parseInt((c || '#3a86ff').slice(1), 16), r = n >> 1
 const badge = (look, name, cls = 'badge') => `<span class="${cls}" style="background:${look.suit};color:${ink(look.suit)}">${esc(look.initials || mkIni(name))}</span>`;
 function weekStart(t){ const d = new Date(t); d.setHours(0,0,0,0); d.setDate(d.getDate() - ((d.getDay()+6)%7)); return d.getTime(); }
 
+let viaGet = false;   // merkt sich, wenn nur der Ersatzweg funktioniert
 async function api(path, opt = {}) {
   const headers = { 'Content-Type': 'application/json' };
   if (code) headers['x-access-code'] = code;
-  const r = await fetch(path, { method: opt.method || 'GET', headers, body: opt.body ? JSON.stringify(opt.body) : undefined });
-  const j = await r.json().catch(() => ({}));
+  const m = opt.method || 'GET', bodyTxt = opt.body ? JSON.stringify(opt.body) : undefined;
+  if (m === 'PATCH' || m === 'DELETE') headers['X-HTTP-Method-Override'] = m;   // Proxys lassen oft nur GET/POST durch
+  const send = async alt => {
+    if (alt) { const q = new URLSearchParams({ m, p: path, b: bodyTxt || '{}' }); return fetch('/api/do?' + q, { headers: code ? { 'x-access-code': code } : {}, cache: 'no-store' }); }
+    return fetch(path, { method: m === 'GET' ? 'GET' : 'POST', headers, body: bodyTxt });
+  };
+  let r, j = null;
+  try { r = await send(viaGet && m !== 'GET'); j = await r.json().catch(() => null); } catch (e) { r = null; }
+  // Antwort kam nicht von unserem Server (blockiert oder Sperrseite des Firmen-Proxys) → Ersatzweg über GET
+  if (m !== 'GET' && !viaGet && (!r || !j)) { try { r = await send(true); j = await r.json().catch(() => null); if (r && j) viaGet = true; } catch (e) { r = null; } }
+  if (!r) throw new Error('Keine Verbindung zum Server – blockiert das Firmennetz die Seite?');
+  if (!j) throw new Error(`Das Firmennetz hat die Anfrage blockiert (Status ${r.status})`);
   if (r.status === 401) { askCode(); throw new Error('Zugangscode nötig'); }
-  if (!r.ok) throw new Error(j.error || 'Fehler');
+  if (!r.ok) throw new Error(j.error || 'Fehler ' + r.status);
   if ((opt.method || 'GET') !== 'GET') setTimeout(loadState, 120);   // eigene Änderung sofort anzeigen, auch wenn die Live-Verbindung hängt
   return j;
 }

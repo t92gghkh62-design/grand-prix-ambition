@@ -163,6 +163,7 @@ const id = () => crypto.randomBytes(6).toString('hex');
 const clean = (s, n) => String(s || '').replace(/[<>]/g, '').trim().slice(0, n);
 function send(res, code, obj) { res.writeHead(code, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' }); res.end(JSON.stringify(obj)); }
 function body(req) {
+  if (req._body) return Promise.resolve(req._body);
   return new Promise((resolve) => {
     let b = ''; req.on('data', c => { b += c; if (b.length > 5e6) req.destroy(); });
     req.on('end', () => { try { resolve(b ? JSON.parse(b) : {}); } catch { resolve({}); } });
@@ -245,7 +246,18 @@ const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; cha
 // ---------- Server ----------
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, 'http://x');
-  const p = url.pathname;
+  let p = url.pathname;
+  // Firmennetze: manche Proxys lassen nur GET/POST durch. Ersatzwege:
+  //  · POST mit X-HTTP-Method-Override (PATCH/DELETE)
+  //  · GET /api/do?m=POST&p=/api/...&b={json} (wenn sogar POST blockiert wird)
+  const ov = String(req.headers['x-http-method-override'] || '').toUpperCase();
+  if (req.method === 'POST' && (ov === 'PATCH' || ov === 'DELETE')) req.method = ov;
+  if (p === '/api/do' && req.method === 'GET') {
+    const m = String(url.searchParams.get('m') || '').toUpperCase(), p2 = String(url.searchParams.get('p') || '');
+    if (!['POST', 'PATCH', 'DELETE'].includes(m) || !/^\/api\/(people|admin)\//.test(p2 + '/') || !req.headers['x-access-code'] && !req.headers.authorization) return send(res, 400, { error: 'Ungültig' });
+    try { req._body = JSON.parse(url.searchParams.get('b') || '{}'); } catch { req._body = {}; }
+    req.method = m; p = p2;
+  }
 
   if (!p.startsWith('/api/')) {
     const rel = p === '/' ? 'index.html' : (p === '/admin' || p === '/admin/') ? 'admin.html' : path.normalize(p).replace(/^(\.\.[/\\])+/, '');
