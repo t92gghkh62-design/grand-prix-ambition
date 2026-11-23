@@ -690,7 +690,7 @@ function connect() {
     if (meId && !S.people.some(x => x.id === meId)) meId = null;
     render(); handleEvent(d.event); };
   es.onerror = async () => { $('#offline').style.display = 'block';
-    try { const r = await fetch('/api/state', { headers: code ? { 'x-access-code': code } : {} }); if (r.status === 401) { es.close(); askCode(); } } catch {} };
+    try { const r = await fetch('/api/state', { headers: code ? { 'x-access-code': code } : {} }); if (r.status === 401) { es.close(); $('#offline').style.display = 'none'; askCode(); } } catch {} };   // Code fehlt: kein «Verbindung unterbrochen»
 }
 setTab(tab);
 connect();
