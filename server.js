@@ -75,7 +75,7 @@ async function writeNow() {
   } catch (e) { dirty = true; console.error('Speichern fehlgeschlagen – neuer Versuch in 5 s:', e.message); clearTimeout(saveTimer); saveTimer = setTimeout(flush, 5000); }
 }
 function flush() { saving = (saving || Promise.resolve()).then(writeNow); return saving; }
-function save() { dirty = true; clearTimeout(saveTimer); saveTimer = setTimeout(flush, 300); }
+function save() { state.rev = Math.max(Date.now(), (state.rev || 0) + 1); dirty = true; clearTimeout(saveTimer); saveTimer = setTimeout(flush, 300); }
 // Render stoppt den Dienst (Schlafmodus/Deploy) mit SIGTERM: vorher noch speichern
 for (const sig of ['SIGTERM', 'SIGINT']) process.on(sig, async () => { clearTimeout(saveTimer); try { await flush(); } finally { process.exit(0); } });
 
@@ -286,6 +286,7 @@ const server = http.createServer(async (req, res) => {
   if (!hasAccess(req)) return send(res, 401, { error: 'Zugangscode nötig' });
 
   if (p === '/api/state' && req.method === 'GET') return send(res, 200, publicState());
+  if (p === '/api/rev') return send(res, 200, { rev: state.rev || 0 });   // winzige Abfrage: gibt es Neues?
   if (p === '/api/stream') {
     const admin = isAdmin(req);
     res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', Connection: 'keep-alive', 'X-Accel-Buffering': 'no' });

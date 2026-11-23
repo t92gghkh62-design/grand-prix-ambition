@@ -376,7 +376,7 @@ async function api(path, opt = {}) {
   const j = await r.json().catch(() => ({}));
   if (r.status === 401) { askCode(); throw new Error('Zugangscode nötig'); }
   if (!r.ok) throw new Error(j.error || 'Fehler');
-  if ((opt.method || 'GET') !== 'GET' && Date.now() - lastLive > 12000) setTimeout(loadState, 150);   // ohne Live-Verbindung sofort nachladen
+  if ((opt.method || 'GET') !== 'GET') setTimeout(loadState, 120);   // eigene Änderung sofort anzeigen, auch wenn die Live-Verbindung hängt
   return j;
 }
 
@@ -695,24 +695,34 @@ function handleEvent(ev) {
 // ---------- Verbindung ----------
 let es, lastLive = 0, pollT = null, polling = false;
 // Ersatzweg für Firmennetze: Stand per normalem Abruf laden (Proxys blockieren oft Live-Verbindungen)
+// Nur neuere Stände übernehmen (Proxys liefern Live-Daten manchmal verspätet)
+function applyState(ns, fromPoll) {
+  if (S && S.rev && ns.rev && ns.rev < S.rev) return false;
+  const cnt = st => st ? st.entries.filter(e => e.personId === meId).reduce((a, e) => a + e.delta, 0) : 0, before = cnt(S);
+  const had = S && meId && S.people.some(x => x.id === meId);
+  S = ns; if (meId && !S.people.some(x => x.id === meId)) meId = null;
+  render();
+  // Ohne Live-Verbindung: eigene Etappen/Belohnungen trotzdem feiern
+  if (fromPoll && had && meId) { const after = cnt(S); if (after !== before) handleEvent({ type: after > before ? 'hit' : 'undo', personId: meId, before, after }); }
+  return true;
+}
 async function loadState() {
   if (polling) return; polling = true;
   try { const r = await fetch('/api/state', { headers: code ? { 'x-access-code': code } : {}, cache: 'no-store' });
     if (r.status === 401) { askCode(); return; }
     if (!r.ok) return;
-    S = await r.json(); $('#offline').style.display = 'none';
-    if (meId && !S.people.some(x => x.id === meId)) meId = null;
-    render();
+    applyState(await r.json(), true); $('#offline').style.display = 'none';
   } catch {} finally { polling = false; }
 }
-function startPoll() { clearInterval(pollT); pollT = setInterval(() => { if (!sleeping && Date.now() - lastLive > 12000) loadState(); }, 6000); }
+function startPoll() { clearInterval(pollT); pollT = setInterval(async () => { if (sleeping || document.hidden) return;
+  try { const r = await fetch('/api/rev', { headers: code ? { 'x-access-code': code } : {}, cache: 'no-store' }); if (!r.ok) return;
+    const { rev } = await r.json(); if (!S || (rev || 0) > (S.rev || 0)) loadState(); } catch {} }, 5000); }
 function connect() {
   if (es) es.close();
   loadState(); startPoll();
   es = new EventSource('/api/stream' + (code ? '?code=' + encodeURIComponent(code) : ''));
-  es.onmessage = m => { lastLive = Date.now(); $('#offline').style.display = 'none'; const d = JSON.parse(m.data); S = d.state;
-    if (meId && !S.people.some(x => x.id === meId)) meId = null;
-    render(); handleEvent(d.event); };
+  es.onmessage = m => { lastLive = Date.now(); $('#offline').style.display = 'none'; const d = JSON.parse(m.data);
+    if (applyState(d.state)) handleEvent(d.event); };
   es.onerror = async () => { $('#offline').style.display = 'block';
     try { const r = await fetch('/api/state', { headers: code ? { 'x-access-code': code } : {} }); if (r.status === 401) { es.close(); $('#offline').style.display = 'none'; askCode(); } } catch {} };   // Code fehlt: kein «Verbindung unterbrochen»
 }
