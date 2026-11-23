@@ -120,10 +120,11 @@
           const sc = Math.abs(x) * .6 + Math.abs(z + 5) * .5; if (!best || sc < best[2]) best = [x, z, sc]; }
         if (best) this.massif = { x: best[0], z: best[1], R: 11 }; }
       this.farm = null; if (this.planFarm) this.planFarm(P);
+      this.stream = this.games = null; if (this.planScenes) this.planScenes(P);
       const PD = this.pond;
       if (PD) this.addObs(PD.x, PD.z, PD.r + .3);
       const MS = this.massif;
-      const reserved = (x, z, r) => this.crowdSpots.some(c => Math.hypot(c.x - x, c.z - z) < r + 4.2) || (PD && Math.hypot(PD.x - x, PD.z - z) < PD.r + 3.2 + r) || (MS && Math.hypot(MS.x - x, MS.z - z) < MS.R + 1.5 + r) || (this.farm && this.farmReserved(x, z, r)) || (this.arena && this.arenaReserved(x, z, r));
+      const reserved = (x, z, r) => this.crowdSpots.some(c => Math.hypot(c.x - x, c.z - z) < r + 4.2) || (PD && Math.hypot(PD.x - x, PD.z - z) < PD.r + 3.2 + r) || (MS && Math.hypot(MS.x - x, MS.z - z) < MS.R + 1.5 + r) || (this.farm && this.farmReserved(x, z, r)) || (this.arena && this.arenaReserved(x, z, r)) || (this.sceneReserved && this.sceneReserved(x, z, r));
       const baseH = (x, z) => { const d = P.dist(x, z), k = Math.min(1, Math.max(0, (d - 7) / 12));
         return k * (Math.sin(x * .08) * 2.2 + Math.cos(z * .07 + 1) * 1.8 + Math.sin((x + z) * .15) * .7 + 1.2); };
       if (this.farm) this.farm.level = baseH(this.farm.x, this.farm.z);
@@ -346,6 +347,7 @@
       });
       if (this.buildFarm) this.buildFarm(deco, height);
       if (this.buildArena) this.buildArena(deco, height);
+      this.sceneDyn = []; this.sceneActors = []; if (this.buildScenes) this.buildScenes(deco, height);
       this.static = [merge(world), merge(deco)];
       this.water = new Node();
       if (PD) { if (W) this.water.add(new Node(G.cyl(PD.r + .35, PD.r + .35, .06, 40), '#d9eef6', { emis: .25, alpha: .95 }).at(PD.x, PD.y, PD.z), new Node(G.cyl(PD.r * .6, PD.r * .6, .065, 30), '#c4e2ee', { emis: .3, alpha: .9 }).at(PD.x + 1, PD.y + .005, PD.z - .5));
@@ -842,6 +844,7 @@
       for (const c of this.crowd || []) out.push([c.node, c.name || (c.group.arena ? 'Fan im Zielgelände' : 'Fan am Wegrand'), 1.6]);
       for (const f of this.farmLife || []) out.push([f.node, Forest.FARM_NAMES[f.kind] || 'Hoftier', .8]);
       for (const h of this.hikers || []) out.push([h.node, 'Wanderer', 1.6]);
+      for (const a of this.sceneActors || []) out.push([a.node, a.name, 1.6]);
       for (const f of this.flyers || []) out.push([f.node, f.kind === 'hawk' ? 'Bussard' : 'Vogel', 0]);
       return out; }
     tap(e) { const rect = this.canvas.getBoundingClientRect(), x = e.clientX - rect.left, y = e.clientY - rect.top; let best = null, bd = 50;
@@ -865,7 +868,7 @@
       const T = this.tour, racers = [...this.racers.values()];
       T.t += rdt;
       if (T.t > 8) { T.t = 0; this.uo = { yaw: 0, pitch: 0, dist: 1 };
-        const kinds = ['overview', 'leader', 'pond', 'farm', 'crowd', 'rocks', 'animal', 'finish', 'random', 'hiker']; T.i = (T.i + 1) % kinds.length;
+        const kinds = ['overview', 'leader', 'pond', 'mill', 'farm', 'crowd', 'games', 'rocks', 'animal', 'finish', 'random', 'hiker']; T.i = (T.i + 1) % kinds.length;
         T.kind = kinds[T.i];
         if (T.kind === 'random' && racers.length) T.racer = racers[Math.floor(Math.random() * racers.length)];
         if (T.kind === 'animal') { const pool = this.animals.filter(a => !a.fixed || Math.random() < .3); T.animal = pool[Math.floor(Math.random() * pool.length)]; }
@@ -893,6 +896,10 @@
           return { yaw: T.yaw0 + sway * 1.3 + this.uo.yaw, pitch: .42 + this.uo.pitch, dist: 15 * this.uo.dist, target: [P.x, P.y + .6, P.z] }; } break;
         case 'farm': if (this.farm) { const F = this.farm, c = F.w(-1, 1.5); this.caption('🎬 Auf dem Bauernhof');
           return { yaw: F.yaw + Math.sin(T.t * .2) * .6 + this.uo.yaw, pitch: .42 + this.uo.pitch, dist: 24 * this.uo.dist, target: [c[0], F.level + 1.5, c[1]] }; } break;
+        case 'mill': if (this.millWheel) { const w = this.millWheel.pos; this.caption('🎬 An der alten Mühle');
+          return { yaw: (this.millWheel.rot[1] || 0) + PI / 2 + Math.sin(T.t * .25) * .5 + this.uo.yaw, pitch: .3 + this.uo.pitch, dist: 13 * this.uo.dist, target: [w[0], w[1] + .5, w[2]] }; } break;
+        case 'games': if (this.games) { const g = this.games, p = g.w(0, -1), y = this.height(p[0], p[1]); this.caption('🎬 Spielwiese: Dart und Pingpong');
+          return { yaw: Math.atan2(g.V[0], g.V[1]) + Math.sin(T.t * .2) * .6 + this.uo.yaw, pitch: .38 + this.uo.pitch, dist: 15 * this.uo.dist, target: [p[0], y + 1.2, p[1]] }; } break;
         case 'hiker': if (T.hiker) { const p = T.hiker.node.pos; this.caption('🎬 Wanderer auf dem Waldweg');
           return { yaw: T.yaw0 + sway + this.uo.yaw, pitch: .25 + this.uo.pitch, dist: 7 * this.uo.dist, target: [p[0], 1.8, p[2]] }; } break;
       }
@@ -924,6 +931,7 @@
       this.updateRocks(t, dt);
       this.moveAnimals(t, dt);
       if (this.updateFarm) this.updateFarm(t, dt);
+      if (this.updateScenes) this.updateScenes(t, dt);
       if (this.timeScale > 1) this.timeOffset += rdt * 1000 * (this.timeScale - 1);
       this.skyT = (this.skyT || 0) + rdt; if (this.skyT > (this.timeScale > 1 ? .05 : 1)) { this.skyT = 0; this.updateSky(); }
       this.moveFlyers(t);
@@ -950,7 +958,7 @@
       // Detailstufe: weit entfernte Figuren als ein einziges Objekt (spart Zeichenaufrufe)
       const far2 = 42 * 42, L = n => { const dx = n.pos[0] - eye[0], dy = n.pos[1] - eye[1], dz = n.pos[2] - eye[2]; if (dx * dx + dy * dy + dz * dz < far2) return n;
         const l = n.lod || (n.lod = lodOf(n)), b = n.anim && n.anim.bob ? n.anim.bob.pos[1] * n.scl[1] : 0; l.pos = [n.pos[0], n.pos[1] + b, n.pos[2]]; l.rot = n.rot; l.scl = n.scl; return l; };   // Hüpfen bleibt sichtbar
-      this.r.render([...this.static, ...this.clouds, this.lamps, ...this.pondLife, this.pondFx, this.water, this.fall, ...this.animals.map(a => L(a.node)), ...this.farmLife.map(f => L(f.node)), ...(this.confetti ? [this.confetti] : []), ...this.rockLife.map(a => L(a.n)), ...this.crowd.map(c => L(c.node)), ...this.hikers.map(h => L(h.node)), ...this.flyers.map(f => f.node), ...[...this.racers.values()].map(r => r.node), this.dust, this.motes], { pos: eye, target: c.target, fov: c.fov, near: .5, far: 400 });
+      this.r.render([...this.static, ...this.clouds, this.lamps, ...this.pondLife, this.pondFx, this.water, this.fall, ...this.animals.map(a => L(a.node)), ...this.farmLife.map(f => L(f.node)), ...(this.sceneDyn || []), ...(this.sceneActors || []).map(a => L(a.node)), ...(this.confetti ? [this.confetti] : []), ...this.rockLife.map(a => L(a.n)), ...this.crowd.map(c => L(c.node)), ...this.hikers.map(h => L(h.node)), ...this.flyers.map(f => f.node), ...[...this.racers.values()].map(r => r.node), this.dust, this.motes], { pos: eye, target: c.target, fov: c.fov, near: .5, far: 400 });
       // Beschriftungen
       const W = this.canvas.clientWidth, H = this.canvas.clientHeight;
       for (const r of this.racers.values()) { const s = this.r.project([r.node.pos[0], r.node.pos[1] + 3.1, r.node.pos[2]]); const el = r.label;

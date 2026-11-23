@@ -305,3 +305,178 @@
         this.confetti.add(c); } }
   };
 })();
+
+// ---------- Bach mit Wassermühle · Spielwiese mit Dart und Pingpong ----------
+(function () {
+  'use strict';
+  const Fo = window.Forest; if (!Fo) return;
+  const { G, Node, merge } = window.Mini3D, PI = Math.PI;
+  const N = (geo, col, x = 0, y = 0, z = 0, opt) => new Node(geo, col, opt).at(x, y, z);
+  const box = (w, h, d, c, x, y, z, opt) => N(G.box(w, h, d), c, x, y, z, opt);
+  const cyl = (rt, rb, h, seg, c, x, y, z) => N(G.cyl(rt, rb, h, seg), c, x, y, z);
+  const sph = (r, c, x, y, z) => N(G.sphere(r, 7, 5), c, x, y, z);
+  const rng = seed => { let s = seed; return () => (s = (s * 16807) % 2147483647) / 2147483647; };
+  const yawTo = (dx, dz) => Math.atan2(-dz, dx);          // Figuren schauen entlang +X
+  const LOOKS = ['#e63946', '#3a86ff', '#2a9d8f', '#f4a261', '#8338ec', '#ffd23f', '#06d6a0', '#ff006e'];
+  const HAIRS = ['short', 'long', 'curly', 'bob', 'ponytail', 'spiky'], HC = ['#3b2a1e', '#6b4423', '#d9b45a', '#1d1a17', '#8a3b1f'], SK = ['#f6d3b3', '#e8b48f', '#c98e62', '#9a6440'];
+  const look = R => ({ suit: LOOKS[Math.floor(R() * 8)], suit2: '#ffffff', pattern: ['solid', 'racing', 'checker'][Math.floor(R() * 3)], hat: R() < .7 ? 'none' : 'cap', glasses: 'none',
+    hair: HAIRS[Math.floor(R() * 6)], hairColor: HC[Math.floor(R() * 5)], skin: SK[Math.floor(R() * 4)], pants: R() < .5 ? '#2d3a55' : '#3b3b3b' });
+
+  // ---- Planung: freie Plätze suchen (vor dem Baumpflanzen) ----
+  Fo.prototype.planScenes = function (P) {
+    const PD = this.pond, MS = this.massif, F = this.farm, CS = this.crowdSpots, A = this.arena;
+    const free = (x, z, r) => !(PD && Math.hypot(x - PD.x, z - PD.z) < PD.r + r + 2) && !(MS && Math.hypot(x - MS.x, z - MS.z) < MS.R + r + 2)
+      && !(F && Math.hypot(x - F.x, z - F.z) < 17 + r) && !CS.some(c => Math.hypot(c.x - x, c.z - z) < r + 6) && !(A && A.members.some(m => Math.hypot(m.x - x, m.z - z) < r + 4));
+    // Bach: von einer Quelle ins Teich-Ufer, mit leichten Schlaufen, nie über den Pfad
+    this.stream = null;
+    if (PD) { let best = null;
+      for (let a = 0; a < PI * 2; a += PI / 36) for (const L of [24, 28, 32]) {
+        const sx = PD.x + Math.cos(a) * (PD.r + L), sz = PD.z + Math.sin(a) * (PD.r + L), ex = PD.x + Math.cos(a) * (PD.r - .6), ez = PD.z + Math.sin(a) * (PD.r - .6);
+        const pts = [], n = Math.ceil(L / .9), px = -Math.sin(a), pz = Math.cos(a); let ok = true, dsum = 0;
+        for (let i = 0; i <= n; i++) { const f = i / n, w = Math.sin(f * PI * 2.3) * 1.6 * Math.sin(f * PI), x = sx + (ex - sx) * f + px * w, z = sz + (ez - sz) * f + pz * w; pts.push([x, z]);
+          const d = P.dist(x, z); dsum += d; if (d < 7.5 || (f < .82 && !free(x, z, 1.2))) { ok = false; break; } }
+        if (!ok) continue; const mid = pts[Math.round(n * .45)], mp = P.dist(mid[0], mid[1]);
+        if (mp < 11 || !free(mid[0], mid[1], 5)) continue;
+        const sc = Math.abs(mp - 14) + Math.abs(L - 28) * .2; if (!best || sc < best.sc) best = { pts, sc, mi: Math.round(n * .45) }; }
+      if (best) { const i = best.mi, a0 = best.pts[i], a1 = best.pts[i + 1], dx = a1[0] - a0[0], dz = a1[1] - a0[1], l = Math.hypot(dx, dz) || 1;
+        best.millAt = [a0[0] - dz / l * 3.4, a0[1] + dx / l * 3.4]; }
+      this.stream = best; }
+    // Spielwiese: Dart-Ecke und Pingpong-Tisch auf einer Lichtung
+    this.games = null; { let best = null;
+      for (let x = -56; x <= 56; x += 2) for (let z = -70; z <= 40; z += 2) { const d = P.dist(x, z); if (d < 13 || d > 19 || !free(x, z, 8)) continue;
+        if (this.stream && this.stream.pts.some(p => Math.hypot(p[0] - x, p[1] - z) < 11)) continue;
+        const sc = Math.hypot(x * .8, z + 10); if (!best || sc < best.sc) best = { x, z, sc }; }
+      if (best) { let bt = 0, bd = 1e9; for (let i = 0; i <= 300; i++) { const q = P.at(i / 300), dd = Math.hypot(q.p[0] - best.x, q.p[2] - best.z); if (dd < bd) { bd = dd; bt = i / 300; } }
+        const q = P.at(bt), V = [(q.p[0] - best.x) / bd, (q.p[2] - best.z) / bd], U = [V[1], -V[0]];
+        this.games = { x: best.x, z: best.z, U, V, w: (u, v) => [best.x + U[0] * u + V[0] * v, best.z + U[1] * u + V[1] * v] }; } }
+  };
+  Fo.prototype.sceneReserved = function (x, z, r) {
+    if (this.stream && this.stream.pts.some(p => Math.hypot(p[0] - x, p[1] - z) < r + 2.6)) return true;
+    if (this.stream) { const m = this.stream.millAt; if (m && Math.hypot(m[0] - x, m[1] - z) < r + 9) return true; }
+    return !!this.games && Math.hypot(this.games.x - x, this.games.z - z) < r + 8.5;
+  };
+
+  // ---- Bauen ----
+  Fo.prototype.buildScenes = function (deco, height) {
+    const W = this.season === 'winter', R = rng(4242); this.sceneDyn = []; this.sceneActors = [];
+    const S = this.stream;
+    if (S) {
+      const pts = S.pts.map(p => [p[0], height(p[0], p[1]), p[1]]), water = W ? '#cfe6f2' : '#3f93b8';
+      // Wasserband dem Gelände entlang, Ufer mit Kies und Steinen
+      deco.add(new Node(G.custom(B => { for (let i = 0; i < pts.length - 1; i++) { const a = pts[i], b = pts[i + 1], dx = b[0] - a[0], dz = b[2] - a[2], l = Math.hypot(dx, dz) || 1, nx = -dz / l, nz = dx / l;
+        const w0 = .55 + i / pts.length * .45, w1 = .55 + (i + 1) / pts.length * .45, P2 = (p, w, e) => [p[0] + nx * w, p[1] + e, p[2] + nz * w];
+        B.tri(P2(a, -w0 - .5, .03), P2(b, -w1 - .5, .03), P2(b, w1 + .5, .03)); B.tri(P2(a, -w0 - .5, .03), P2(b, w1 + .5, .03), P2(a, w0 + .5, .03)); } }), W ? '#e4ebef' : '#8f8466'));
+      const wn = new Node(G.custom(B => { for (let i = 0; i < pts.length - 1; i++) { const a = pts[i], b = pts[i + 1], dx = b[0] - a[0], dz = b[2] - a[2], l = Math.hypot(dx, dz) || 1, nx = -dz / l, nz = dx / l;
+        const w0 = .55 + i / pts.length * .45, w1 = .55 + (i + 1) / pts.length * .45, P2 = (p, w) => [p[0] + nx * w, p[1] + .08, p[2] + nz * w];
+        B.tri(P2(a, -w0), P2(b, -w1), P2(b, w1)); B.tri(P2(a, -w0), P2(b, w1), P2(a, w0)); } }), water, { emis: W ? .05 : .18 });
+      deco.add(wn);
+      for (let i = 0; i < pts.length; i += 1) { if (R() < .35) continue; const a = pts[i], b = pts[Math.min(i + 1, pts.length - 1)], dx = b[0] - a[0], dz = b[2] - a[2], l = Math.hypot(dx, dz) || 1, sd = R() < .5 ? -1 : 1, w = .62 + i / pts.length * .45 + R() * .25;
+        const x = a[0] - dz / l * w * sd, z = a[2] + dx / l * w * sd, r = .12 + R() * .2; deco.add(N(G.sphere(r, 6, 4), W ? '#eef2f5' : ['#8d8a84', '#a5a29b', '#77736c'][i % 3], x, a[1] + r * .4, z).scale(1.3, .7, 1));
+        if (!W && R() < .25) for (let k = 0; k < 4; k++) deco.add(N(G.cyl(.012, .02, .7 + R() * .4, 4), '#6e8a3a', x + (R() - .5) * .3, a[1] + .35, z + (R() - .5) * .3));
+        this.addObs(a[0], a[2], .9); }
+      // Quelle mit Felsen
+      const q0 = pts[0]; for (let k = 0; k < 5; k++) { const ang = k * 1.3, r = .5 + R() * .4; deco.add(N(G.sphere(r, 7, 5), W ? '#e8eef2' : '#8a8780', q0[0] + Math.cos(ang) * 1.1, q0[1] + r * .5, q0[2] + Math.sin(ang) * 1.1).scale(1.2, .8, 1)); }
+      // Wassermühle am Bach
+      const mi = S.mi, m0 = pts[mi], m1 = pts[mi + 1], dx = m1[0] - m0[0], dz = m1[2] - m0[2], l = Math.hypot(dx, dz) || 1, tx = dx / l, tz = dz / l, nx = -tz, nz = tx;
+      const hx = m0[0] + nx * 3.4, hz = m0[2] + nz * 3.4, hy = Math.min(height(hx, hz), m0[1]) - .05, house = new Node().at(hx, hy, hz); house.rot = [0, Math.atan2(-tz, tx), 0];
+      S.mill = [hx, hz];
+      house.add(box(4.4, .5, 3.6, '#9a958c', 0, .25, 0), box(4.2, 2.6, 3.4, '#efe7d6', 0, 1.75, 0), box(4.24, .12, 3.44, '#7a4622', 0, 3.0, 0));
+      for (const xx of [-2.05, 2.05]) for (const zz of [-1.65, 1.65]) house.add(box(.16, 2.6, .16, '#6b4426', xx, 1.75, zz));
+      house.add(box(4.2, .14, .06, '#6b4426', 0, 1.9, 1.71), box(4.2, .14, .06, '#6b4426', 0, 1.9, -1.71));
+      const roof = G.custom(B => { const a = 2.7, b = 2.4, y0 = 3.0, y1 = 4.9; for (const sx of [-1, 1]) { const q = [[sx * 0 + 0, y1, -a], [0, y1, a], [0, y0, a], [0, y0, -a]];
+        const p = [[0, y1, -a], [0, y1, a], [sx * b, y0, a], [sx * b, y0, -a]]; const c = [0, y0 - 3, 0];
+        const fc = (pp, inside) => { const u = [pp[1][0] - pp[0][0], pp[1][1] - pp[0][1], pp[1][2] - pp[0][2]], v = [pp[2][0] - pp[0][0], pp[2][1] - pp[0][1], pp[2][2] - pp[0][2]], n = [u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0]], m = [(pp[0][0] + pp[2][0]) / 2 - inside[0], (pp[0][1] + pp[2][1]) / 2 - inside[1], (pp[0][2] + pp[2][2]) / 2 - inside[2]];
+          const fl = n[0] * m[0] + n[1] * m[1] + n[2] * m[2] < 0; for (let i = 1; i < pp.length - 1; i++) fl ? B.tri(pp[0], pp[i + 1], pp[i]) : B.tri(pp[0], pp[i], pp[i + 1]); };
+        fc(p, c); fc(p.map(v => [v[0], v[1] - .12, v[2]]), [0, y1 + 9, 0]); } });
+      house.add(N(roof, W ? '#f4f7fb' : '#8a4b32').rotate(0, PI / 2, 0));
+      for (const xx of [-2.1, 2.1]) house.add(N(G.custom(B => { const t = [[xx, 3.0, -1.7], [xx, 3.0, 1.7], [xx, 4.55, 0]]; B.tri(...t); B.tri(t[0], t[2], t[1]); }), '#efe7d6'),
+        box(.06, .5, .5, '#2a3d52', xx * 1.003, 3.55, 0));
+      house.add(box(.9, 1.7, .06, '#6b4426', -.9, 1.35, 1.72), box(.7, .7, .06, '#2a3d52', 1.0, 2.0, 1.72), box(.7, .7, .06, '#2a3d52', 1.0, 2.0, -1.72), box(.5, 1.6, .5, '#bdb6aa', 1.3, 5.1, -.4));
+      house.add(box(.26, .26, 1.0, '#7a5532', 0, .95 + (m0[1] - hy), -2.2));   // Achse zum Rad
+      deco.add(house); this.addObs(hx, hz, 2.9);
+      { const key = Math.floor(hx / 6) + ',' + Math.floor(hz / 6); let l2 = this.trees.get(key); if (!l2) this.trees.set(key, l2 = []); l2.push([hx, hz, 3.1, hy + 5.2]); }
+      // Wasserrad (dreht sich) und Holzkanal
+      const wx = m0[0] + nx * .75, wz = m0[2] + nz * .75, wheel = new Node().at(wx, m0[1] + .95, wz), spin = new Node(null, null, { name: 'spin' }); wheel.rot = [0, Math.atan2(-tz, tx), 0];
+      const rim = '#6b4426';
+      spin.add(N(G.torus(1.25, .07, 22, 5), rim, 0, 0, .32), N(G.torus(1.25, .07, 22, 5), rim, 0, 0, -.32), N(G.cyl(.16, .16, .8, 8), '#4a3020').rotate(PI / 2, 0, 0));
+      for (let k = 0; k < 12; k++) { const a = k / 12 * PI * 2; spin.add(N(G.box(.42, .06, .7), '#8a6a42', Math.cos(a) * 1.2, Math.sin(a) * 1.2, 0).rotate(0, 0, a), N(G.box(1.2, .05, .05), rim, Math.cos(a) * .6, Math.sin(a) * .6, .3).rotate(0, 0, a), N(G.box(1.2, .05, .05), rim, Math.cos(a) * .6, Math.sin(a) * .6, -.3).rotate(0, 0, a)); }
+      const sp = merge(spin); sp.name = 'spin'; const spinWrap = new Node(); spinWrap.add(sp); wheel.add(spinWrap); wheel.spin = spinWrap;
+      wheel.add(box(.12, 1.4, .12, '#5a3a22', 0, -.7, .48), box(.12, 1.4, .12, '#5a3a22', 0, -.7, -.48));
+      this.sceneDyn.push(wheel); this.millWheel = wheel;
+      // Strömung: kleine Schaumflocken treiben bachabwärts
+      const foam = new Node(); foam.items = [];
+      for (let k = 0; k < 34; k++) { const f = N(G.box(.18, .02, .1), '#ffffff', 0, 0, 0, { emis: .4 }); f.fs = R() * (pts.length - 1); f.fo = (R() - .5) * .8; foam.add(f); foam.items.push(f); }
+      foam.pts = pts; this.sceneDyn.push(foam); this.foam = foam;
+    }
+    const Gm = this.games;
+    if (Gm) {
+      const base = height(Gm.x, Gm.z), at = (u, v, y = 0) => { const p = Gm.w(u, v); return [p[0], height(p[0], p[1]) + y, p[1]]; };
+      const frame = (u, v, ang) => { const n = new Node(), p = at(u, v); n.pos = p; n.rot = [0, Math.atan2(Gm.V[0], Gm.V[1]) + (ang || 0), 0]; return n; };
+      // Pingpong-Tisch (Länge entlang u)
+      const tb = frame(-4, 0); tb.add(box(2.74, .05, 1.525, '#1f5f8b', 0, .76, 0), box(2.74, .052, .02, '#ffffff', 0, .76, 0), box(.02, .052, 1.525, '#ffffff', 0, .76, 0),
+        box(.02, .16, 1.7, '#e8e8e8', 0, .86, 0), box(.02, .15, 1.65, '#2b2b2b', 0, .86, 0, { alpha: .5 }));
+      for (const [xx, zz] of [[-1.2, -.6], [1.2, -.6], [-1.2, .6], [1.2, .6]]) tb.add(box(.05, .74, .05, '#3a3a3a', xx, .37, zz));
+      deco.add(tb); { const p = at(-4, 0); this.addObs(p[0], p[2], 1.6); }
+      // Dartscheibe auf Ständer, Bank und Kreidetafel
+      const db = frame(4.5, -3.2); db.add(box(.12, 2.4, .12, '#5a3a22', 0, 1.2, -.12), box(.95, .95, .06, '#3b2a1e', 0, 1.73, -.06), box(1.05, .06, .1, '#5a3a22', 0, 2.22, -.04), box(1.05, .06, .1, '#5a3a22', 0, 1.24, -.04));
+      const rings = [['#1b1b1b', .23], ['#e9dfc6', .2], ['#c1121f', .155], ['#e9dfc6', .145], ['#1b1b1b', .1], ['#1f7a3a', .09], ['#c1121f', .025]];
+      rings.forEach(([c, r], i) => db.add(N(G.cyl(r * 1.6, r * 1.6, .03 + i * .006, 28), c, 0, 1.73, .01 + i * .006).rotate(PI / 2, 0, 0)));
+      for (let k = 0; k < 10; k++) db.add(N(G.box(.004, .62, .004), '#6e6e6e', 0, 1.73, .06).rotate(0, 0, k / 10 * PI));
+      deco.add(db); { const p = at(4.5, -3.2); this.addObs(p[0], p[2], .7); }
+      const bench = frame(1.2, -1.6, PI / 2); bench.add(box(1.8, .08, .42, '#9a7448', 0, .46, 0), box(.08, .46, .4, '#5a4030', -.8, .23, 0), box(.08, .46, .4, '#5a4030', .8, .23, 0)); deco.add(bench);
+      const chalk = frame(6.3, -2.6, -.5); chalk.add(box(.06, 1.4, .06, '#5a3a22', 0, .7, -.35), box(.06, 1.4, .06, '#5a3a22', 0, .7, .35), box(.04, .7, .8, '#22302a', 0, 1.15, 0), box(.045, .05, .6, '#f4f4f4', 0, 1.3, .05), box(.045, .05, .4, '#f4f4f4', 0, 1.15, -.05), box(.045, .05, .5, '#f4f4f4', 0, 1.0, 0)); deco.add(chalk);
+      const RR = rng(77);
+      // Pingpong-Spieler an beiden Tischenden
+      const pp = [-1, 1].map(sd => { const pos = at(-4 + sd * 2.1, sd * .1), tgt = at(-4, 0), n = Models.person(look(RR), 'paddle'); n.scl = [1.25, 1.25, 1.25];
+        n.pos = pos; n.rot = [0, yawTo(tgt[0] - pos[0], tgt[2] - pos[2]), 0]; n.cull = 2.5; this.sceneActors.push({ node: n, name: 'Pingpong-Spieler·in', kind: 'pp', sd }); return n; });
+      const ball = N(G.sphere(.05, 8, 6), '#fff8e8', 0, 0, 0, { emis: .5 }); this.sceneDyn.push(ball);
+      this.pingpong = { a: at(-4 - 1.55, 0, 1.0), b: at(-4 + 1.55, 0, 1.0), table: base, ball, players: pp, t: 0, dir: 1, rally: 0, pause: 0 };
+      // Dartspieler·innen am Abwurf (2,37 m vor der Scheibe), eine Person schaut zu
+      const board = at(4.5, -3.2 + .06, 1.73 * 1);
+      const darters = [-.45, .45].map((du, i) => { const pos = at(4.5 + du, -3.2 + 2.37 + .3), n = Models.person(look(RR), 'dart'); n.scl = [1.22, 1.22, 1.22];
+        n.pos = pos; n.rot = [0, yawTo(board[0] - pos[0], board[2] - pos[2]), 0]; n.cull = 2.5; this.sceneActors.push({ node: n, name: 'Dartspieler·in', kind: 'dart' }); return n; });
+      { const pos = at(1.2, -1.6, 0), n = Models.person(look(RR), 'cheer'); n.scl = [1.2, 1.2, 1.2]; n.pos = [pos[0], pos[1], pos[2]]; n.rot = [0, yawTo(board[0] - pos[0], board[2] - pos[2]), 0]; n.cull = 2.5;
+        this.sceneActors.push({ node: n, name: 'Zuschauer·in', kind: 'fan' }); }
+      const darts = new Node(); this.sceneDyn.push(darts);
+      this.dart = { board, players: darters, darts, turn: 0, n: 0, t: 0, phase: 'aim', fly: null, cols: ['#ffd23f', '#3a86ff'] };
+      const p = at(-4, 0); this.addObs(p[0] - 2.4, p[2], .6);
+    }
+  };
+
+  // ---- Bewegung ----
+  Fo.prototype.updateScenes = function (t, dt) {
+    if (this.millWheel) this.millWheel.spin.rot = [0, 0, -t * .9];
+    if (this.foam) { const P = this.foam.pts, L = P.length - 1;
+      for (const f of this.foam.items) { f.fs = (((f.fs + (dt > 0 ? dt : 0) * 1.6) % L) + L) % L; if (!(f.fs >= 0)) f.fs = 0; const i = Math.floor(f.fs), k = f.fs - i, a = P[i], b = P[Math.min(i + 1, L)], dx = b[0] - a[0], dz = b[2] - a[2], l = Math.hypot(dx, dz) || 1;
+        f.pos = [a[0] + dx * k - dz / l * f.fo, a[1] + (b[1] - a[1]) * k + .1, a[2] + dz * k + dx / l * f.fo]; f.rot = [0, Math.atan2(-dz, dx), 0]; } }
+    for (const a of this.sceneActors || []) { const A = a.node.anim; Models.animatePerson(a.node, t, 0, a.kind === 'fan' ? (this.dart && this.dart.cheer > 0 ? 1 : 0) : 0, 0); }
+    const pp = this.pingpong;
+    if (pp) {
+      if (pp.pause > 0) { pp.pause -= dt; pp.ball.visible = pp.pause < 1.2; }
+      else { pp.t += dt / .85; pp.ball.visible = true;
+        if (pp.t >= 1) { pp.t = 0; pp.dir *= -1; pp.rally++; if (pp.rally > 6 + Math.floor(Math.random() * 10)) { pp.rally = 0; pp.pause = 2; } } }
+      const from = pp.dir > 0 ? pp.a : pp.b, to = pp.dir > 0 ? pp.b : pp.a, k = pp.t;
+      // Flugbahn: Aufsetzer auf der Gegenseite bei 70 %
+      const tbl = pp.table + .79, y = k < .7 ? from[1] + (tbl - from[1]) * (k / .7) + Math.sin(k / .7 * PI) * .32 : tbl + Math.sin((k - .7) / .3 * PI) * .3 + (to[1] - tbl) * ((k - .7) / .3);
+      pp.ball.pos = [from[0] + (to[0] - from[0]) * k, y, from[2] + (to[2] - from[2]) * k];
+      pp.players.forEach((n, i) => { const hitter = (i === 0) === (pp.dir < 0), near = hitter ? Math.max(0, 1 - pp.t / .2) : Math.max(0, (pp.t - .75) / .25);
+        n.anim.thr.rot = [0, (hitter ? -1 : 1) * near * .9, -near * .3]; });
+    }
+    const D = this.dart;
+    if (D) { D.t += dt; D.cheer = Math.max(0, (D.cheer || 0) - dt);
+      const pl = D.players[D.turn], thr = pl.anim.thr;
+      if (D.phase === 'aim') { thr.rot = [0, 0, Math.min(1, D.t / .6) * .55]; if (D.t > .9) { D.phase = 'throw'; D.t = 0; } }
+      else if (D.phase === 'throw') { thr.rot = [0, 0, .55 - Math.min(1, D.t / .12) * 1.3];
+        if (!D.fly && D.t > .08) { const s = pl.pos, f = [s[0], s[1] + 1.95, s[2]], ang = Math.random() * PI * 2, r = Math.random() ** 1.4 * .2;
+          const b = D.board, q = this.games, end = [b[0] + q.U[0] * Math.cos(ang) * r, b[1] + Math.sin(ang) * r, b[2] + q.U[1] * Math.cos(ang) * r];
+          const n = new Node(G.box(.16, .016, .016), D.cols[D.turn]); D.darts.add(n); D.fly = { n, f, end, k: 0, bull: r < .045 }; }
+        if (D.t > .5) { D.phase = 'rest'; D.t = 0; } }
+      else if (D.phase === 'rest') { thr.rot = [0, 0, -.75 + Math.min(1, D.t / .5) * .75]; if (D.t > 1.1) { D.n++; D.phase = 'aim'; D.t = 0; if (D.n % 3 === 0) { D.turn = 1 - D.turn; if (D.n % 6 === 0) { D.phase = 'collect'; } } } }
+      else if (D.phase === 'collect') { if (D.t > 1.6) { D.darts.children.length = 0; D.phase = 'aim'; D.t = 0; } }
+      if (D.fly) { const F = D.fly; F.k = Math.min(1, F.k + dt / .38); const k = F.k;
+        F.n.pos = [F.f[0] + (F.end[0] - F.f[0]) * k, F.f[1] + (F.end[1] - F.f[1]) * k + Math.sin(k * PI) * .25, F.f[2] + (F.end[2] - F.f[2]) * k];
+        F.n.rot = [0, Math.atan2(-(F.end[2] - F.f[2]), F.end[0] - F.f[0]), (.5 - k) * .5];
+        if (k >= 1) { if (F.bull) D.cheer = 1.5; D.fly = null; } }
+    }
+  };
+})();

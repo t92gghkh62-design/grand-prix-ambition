@@ -251,7 +251,7 @@
     const upper = new Node(null, null, { name: 'upper' }).at(0, LEG + .39, 0), arms = new Node();
     const arm = (node, sd, hp) => { const a = [-.01, 0, sd * .215], el = [(a[0] + hp[0]) / 2 + .05, (a[1] + hp[1]) / 2 - .04, (a[2] + hp[2]) / 2 + sd * .07];
       node.add(S(.068, s, ...a), rod(a, el, .056, s), S(.054, s, ...el), rod(el, hp, .048, s), S(.06, sk, ...hp)); };
-    let wave = null, flag = null;
+    let wave = null, flag = null, thr = null;
     if (kind === 'sign') {
       for (const sd of [-1, 1]) { arm(arms, sd, [.12, .62, sd * .2]); arms.add(rod([.12, .6, sd * .2], [.12, .95, sd * .2], .02, '#7a5532')); }
       arms.add(plate(text || 'HOPP', .032, signCol || '#e63946', 6).at(.15, 1.08, 0).rotate(0, PI / 2, 0));
@@ -268,14 +268,23 @@
       arm(arms, 1, [.08, -.36, .26]); arm(arms, -1, [.2, .05, -.26]); arms.add(rod([.2, -.75, -.26], [.2, .75, -.26], .02, '#8a6a4a'), B(.03, .03, .2, '#888', .2, .75, -.26));
       for (const fz of [-.08, 0, .08]) arms.add(rod([.2, .75, -.26 + fz], [.2, .98, -.26 + fz], .01, '#888'));
     }
+    else if (kind === 'dart') {               // Dartspieler: Wurfarm mit Pfeil, Gelenk an der Schulter
+      arm(arms, -1, [.04, -.36, -.27]);
+      thr = new Node(null, null, { name: 'thr' }).at(-.01, 0, .215);
+      arm(thr, 0, [.16, .3, .02]); thr.add(rod([.12, .32, .02], [.3, .34, .02], .008, '#d9dde2'), B(.03, .05, .005, '#e63946', .12, .32, .02));
+    } else if (kind === 'paddle') {           // Pingpong: Schläger in der rechten Hand
+      arm(arms, -1, [.14, -.2, -.26]);
+      thr = new Node(null, null, { name: 'thr' }).at(-.01, 0, .215);
+      arm(thr, 0, [.3, -.12, .12]); thr.add(rod([.3, -.12, .12], [.34, -.04, .16], .014, '#8a5a32'), part(G.cyl(.085, .085, .016, 12), '#c1121f', .39, .06, .2).rotate(PI / 2, 0, -.5));
+    }
     else if (kind === 'hiker') { arm(arms, 1, [.1, -.36, .26]); arm(arms, -1, [.22, -.25, -.25]); arms.add(rod([.22, -.25, -.25], [.38, -(LEG + .39), -.27], .02, '#8a6a4a')); }
     else for (const sd of [-1, 1]) arm(arms, sd, [.06, -.38, sd * .26]);
-    upper.add(merge(arms)); if (wave) upper.add(wave); if (flag) upper.add(flag);
+    upper.add(merge(arms)); if (wave) upper.add(wave); if (flag) upper.add(flag); if (thr) upper.add(thr);
     const head = new Node(null, null, { name: 'head' }).at(0, LEG - .02 + .5, 0);
     head.add(merge(new Node().add(headNode(L))).at(0, -.5, 0));
     bob.add(merge(base), upper, head, ...legs);
     root.add(part(G.cyl(1, 1, .01, 12), '#000000', 0, .02, 0, { alpha: .25 }).scale(.32, 1, .26), bob);
-    root.anim = { legs, head, upper, wave, flag, bob, kind, ph: Math.random() * 10 };
+    root.anim = { legs, head, upper, wave, flag, thr, bob, kind, ph: Math.random() * 10 };
     return root;
   }
   // walk 0/1, cheer 0..1, headYaw (lokal)
