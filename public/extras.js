@@ -430,12 +430,12 @@
       const pp = [-1, 1].map(sd => { const pos = at(-4 + sd * 2.1, sd * .1), tgt = at(-4, 0), n = Models.person(look(RR), 'paddle'); n.scl = [1.25, 1.25, 1.25];
         n.pos = pos; n.rot = [0, yawTo(tgt[0] - pos[0], tgt[2] - pos[2]), 0]; n.cull = 2.5; this.sceneActors.push({ node: n, name: 'Pingpong-Spieler·in', kind: 'pp', sd }); return n; });
       const ball = N(G.sphere(.05, 8, 6), '#fff8e8', 0, 0, 0, { emis: .5 }); this.sceneDyn.push(ball);
-      this.pingpong = { a: at(-4 - 1.55, 0, 1.0), b: at(-4 + 1.55, 0, 1.0), table: base, ball, players: pp, t: 0, dir: 1, rally: 0, pause: 0 };
+      this.pingpong = { a: at(-4 - 1.55, 0, 1.0), b: at(-4 + 1.55, 0, 1.0), table: at(-4, 0)[1], ball, players: pp, t: 0, dir: 1, rally: 0, pause: 0 };
       // Dartspieler·innen am Abwurf (2,37 m vor der Scheibe), eine Person schaut zu
       const board = at(4.5, -3.2 + .06, 1.73 * 1);
       const darters = [-.45, .45].map((du, i) => { const pos = at(4.5 + du, -3.2 + 2.37 + .3), n = Models.person(look(RR), 'dart'); n.scl = [1.22, 1.22, 1.22];
         n.pos = pos; n.rot = [0, yawTo(board[0] - pos[0], board[2] - pos[2]), 0]; n.cull = 2.5; this.sceneActors.push({ node: n, name: 'Dartspieler·in', kind: 'dart' }); return n; });
-      { const pos = at(1.2, -1.6, 0), n = Models.person(look(RR), 'cheer'); n.scl = [1.2, 1.2, 1.2]; n.pos = [pos[0], pos[1], pos[2]]; n.rot = [0, yawTo(board[0] - pos[0], board[2] - pos[2]), 0]; n.cull = 2.5;
+      { const pos = at(1.95, -1.6, 0), n = Models.person(look(RR), 'cheer');   // steht vor der Bank n.scl = [1.2, 1.2, 1.2]; n.pos = [pos[0], pos[1], pos[2]]; n.rot = [0, yawTo(board[0] - pos[0], board[2] - pos[2]), 0]; n.cull = 2.5;
         this.sceneActors.push({ node: n, name: 'Zuschauer·in', kind: 'fan' }); }
       const darts = new Node(); this.sceneDyn.push(darts);
       this.dart = { board, players: darters, darts, turn: 0, n: 0, t: 0, phase: 'aim', fly: null, cols: ['#ffd23f', '#3a86ff'] };
@@ -457,7 +457,8 @@
         if (pp.t >= 1) { pp.t = 0; pp.dir *= -1; pp.rally++; if (pp.rally > 6 + Math.floor(Math.random() * 10)) { pp.rally = 0; pp.pause = 2; } } }
       const from = pp.dir > 0 ? pp.a : pp.b, to = pp.dir > 0 ? pp.b : pp.a, k = pp.t;
       // Flugbahn: Aufsetzer auf der Gegenseite bei 70 %
-      const tbl = pp.table + .79, y = k < .7 ? from[1] + (tbl - from[1]) * (k / .7) + Math.sin(k / .7 * PI) * .32 : tbl + Math.sin((k - .7) / .3 * PI) * .3 + (to[1] - tbl) * ((k - .7) / .3);
+      const tbl = pp.table + .835,   // Tischplatte (0,785 m) + Ballradius
+      y = k < .7 ? from[1] + (tbl - from[1]) * (k / .7) + Math.sin(k / .7 * PI) * .32 : tbl + Math.sin((k - .7) / .3 * PI) * .3 + (to[1] - tbl) * ((k - .7) / .3);
       pp.ball.pos = [from[0] + (to[0] - from[0]) * k, y, from[2] + (to[2] - from[2]) * k];
       pp.players.forEach((n, i) => { const hitter = (i === 0) === (pp.dir < 0), near = hitter ? Math.max(0, 1 - pp.t / .2) : Math.max(0, (pp.t - .75) / .25);
         n.anim.thr.rot = [0, (hitter ? -1 : 1) * near * .9, -near * .3]; });
