@@ -2,7 +2,7 @@
 (function () {
   'use strict';
   const Fo = window.Forest; if (!Fo) return;
-  const { G, Node, merge } = window.Mini3D, PI = Math.PI, FIN = Fo.FINISH_T;
+  const { G, Node, merge } = window.Mini3D, PI = Math.PI, FIN = Fo.FINISH_T, WX = Fo.TW || 0;
   const rng = seed => { let s = seed; return () => (s = (s * 16807) % 2147483647) / 2147483647; };
   const smooth = (a, b, x) => { const t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
   const N = (geo, col, x = 0, y = 0, z = 0, opt) => new Node(geo, col, opt).at(x, y, z);
@@ -44,7 +44,7 @@
 
   // ---------- Bauplatz suchen (vor dem Baumpflanzen) ----------
   Fo.prototype.planFarm = function (P) {
-    const PD = this.pond, MS = this.massif, avoid = [[P.at(.36), 9], [P.at(.62), -7.5], [P.at(.48), 6.2]].map(([q, o]) => [q.p[0] + q.side[0] * o, q.p[2] + q.side[2] * o]);
+    const PD = this.pond, MS = this.massif, avoid = [[P.at(.36), 9 + WX], [P.at(.62), -7.5 - WX], [P.at(.48), 6.2 + WX]].map(([q, o]) => [q.p[0] + q.side[0] * o, q.p[2] + q.side[2] * o]);
     let best = null;
     for (let x = -50; x <= 50; x += 2) for (let z = -66; z <= 36; z += 2) { const d = P.dist(x, z); if (d < 25 || d > 34) continue;
       if (PD && Math.hypot(x - PD.x, z - PD.z) < PD.r + 22) continue;
@@ -236,7 +236,7 @@
   // ---------- Zielarena: Absperrgitter, Tribüne, Wimpel und 50 Fans ----------
   Fo.prototype.planArena = function (P) {
     const T = P.total, R = rng(808), st = 1.25 / T, slots = [];
-    const rows = [[-1, 6.5, 0, .893, .99, 0], [1, 6.5, 0, .893, .953, 0], [-1, 7.6, 0, .893, .99, 1], [1, 7.6, 0, .893, .953, 1], [-1, 8.85, .5, .897, .99, 0], [-1, 9.95, 1.0, .897, .99, 1]];
+    const rows = [[-1, 6.5, 0, .893, .99, 0], [1, 6.5, 0, .893, .953, 0], [-1, 7.6, 0, .893, .99, 1], [1, 7.6, 0, .893, .953, 1], [-1, 8.85, .5, .897, .99, 0], [-1, 9.95, 1.0, .897, .99, 1]].map(r => (r[1] += WX, r));
     rows.forEach(([sd, off, lift, t0, t1, stag], ri) => {
       for (let t = t0 + (stag ? st / 2 : 0); t <= t1; t += st) { const q = P.at(t), x = q.p[0] + q.side[0] * sd * off, z = q.p[2] + q.side[2] * sd * off;
         const s = sd < 0 ? (t - .893) / (.99 - .893) : 1 + (.953 - t) / (.953 - .893);
@@ -251,7 +251,7 @@
   Fo.prototype.arenaReserved = function (x, z, r) { return !!this.arena && this.arena.members.some(m => (m.x - x) ** 2 + (m.z - z) ** 2 < (r + 2.2) ** 2); };
   Fo.prototype.buildArena = function (deco, height) {
     const P = this.path, T = P.total, W = this.season === 'winter';
-    const at = (t, sd, off) => { const q = P.at(t); return { x: q.p[0] + q.side[0] * sd * off, z: q.p[2] + q.side[2] * sd * off, th: Math.atan2(q.tan[0], q.tan[2]) }; };
+    const at = (t, sd, off) => { const q = P.at(t); off += WX; return { x: q.p[0] + q.side[0] * sd * off, z: q.p[2] + q.side[2] * sd * off, th: Math.atan2(q.tan[0], q.tan[2]) }; };
     // Absperrgitter mit Bannern (rot/weiss)
     for (const [sd, t0, t1] of [[-1, .893, .99], [1, .893, .955]]) { let k = 0;
       for (let t = t0; t < t1; t += 2.05 / T, k++) { const p = at(t + 1 / T, sd, 5.75), g = new Node().at(p.x, height(p.x, p.z), p.z); g.rot = [0, p.th, 0];
@@ -298,7 +298,7 @@
     this.partyT = 7; this.ola = null; this.olaWait = 12;
     if (!this.confetti) this.confetti = new Node();
     const q = this.path.at(FIN), COLS = ['#e30613', '#ffffff', '#ffd23f', '#3a86ff', '#06d6a0', '#ff006e', '#8338ec'];
-    for (const sd of [-1, 1]) { const x = q.p[0] + q.side[0] * sd * 5.2, z = q.p[2] + q.side[2] * sd * 5.2;
+    for (const sd of [-1, 1]) { const x = q.p[0] + q.side[0] * sd * (5.2 + WX), z = q.p[2] + q.side[2] * sd * (5.2 + WX);
       for (let i = 0; i < 70; i++) { if (this.confetti.children.length > 260) break;
         const c = new Node(G.box(.16, .02, .11), COLS[i % COLS.length], { emis: .25 }).at(x, 5.2, z), sp = 2 + Math.random() * 3.5, a = Math.random() * PI * 2;
         c.vel = [Math.cos(a) * sp * .6 - q.side[0] * sd * 2, 5 + Math.random() * 4, Math.sin(a) * sp * .6 - q.side[2] * sd * 2]; c.life = 3.5 + Math.random() * 2; c.spin = 4 + Math.random() * 6; c.rot = [Math.random() * 3, 0, Math.random() * 3];
@@ -310,7 +310,7 @@
 (function () {
   'use strict';
   const Fo = window.Forest; if (!Fo) return;
-  const { G, Node, merge } = window.Mini3D, PI = Math.PI;
+  const { G, Node, merge } = window.Mini3D, PI = Math.PI, WX = Fo.TW || 0;
   const N = (geo, col, x = 0, y = 0, z = 0, opt) => new Node(geo, col, opt).at(x, y, z);
   const box = (w, h, d, c, x, y, z, opt) => N(G.box(w, h, d), c, x, y, z, opt);
   const cyl = (rt, rb, h, seg, c, x, y, z) => N(G.cyl(rt, rb, h, seg), c, x, y, z);

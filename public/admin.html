@@ -127,9 +127,10 @@ function compute() {
   const st = parseD(S.settings.startDate), en = parseD(S.settings.endDate); en.setHours(23,59,59);
   const frac = Math.max(0, Math.min(1, (Date.now() - st) / (en - st))), daysLeft = Math.max(0, Math.ceil((en - Date.now()) / 864e5));
   const by = {}; S.people.forEach(p => by[p.id] = { ...p, count: 0, last: null });
-  for (const e of S.entries) { const x = by[e.personId]; if (!x) continue; x.count += e.delta; if (e.delta > 0) x.last = e.ts; }
+  for (const e of [...S.entries].sort((a, b) => String(a.ts).localeCompare(String(b.ts)))) { const x = by[e.personId]; if (!x) continue; x.count += e.delta; if (e.delta > 0) x.last = e.ts; if (e.delta) x.reachedAt = new Date(e.ts).getTime(); }
   const list = Object.values(by).map(x => ({ ...x, pct: x.count / x.goal, diff: x.count - Math.round(x.goal * frac) }));
-  list.sort((a, b) => b.pct - a.pct || a.name.localeCompare(b.name));
+  // gleiche Rangfolge wie Anzeigetafel und Siegerpodest: bei gleichen % zählt, wer den Stand zuerst erreicht hat
+  list.sort((a, b) => (Math.abs(b.pct - a.pct) > 1e-9 ? b.pct - a.pct : 0) || (b.pct > 0 ? (a.reachedAt || 0) - (b.reachedAt || 0) : 0) || a.name.localeCompare(b.name));
   return { list, frac, daysLeft };
 }
 

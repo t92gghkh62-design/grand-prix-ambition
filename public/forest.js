@@ -4,6 +4,8 @@
   const { G, Node, merge, Renderer, Path } = window.Mini3D;
   const PI = Math.PI;
   const START_T = .03, FINISH_T = .93;          // Fortschritt 0..100 % → Pfadparameter
+  const TW = 2.2, LANE_HALF = 5.9;               // Strecke je Seite um TW verbreitert: 16+ Fahrzeuge fahren nebeneinander
+  const PARK_T = FINISH_T + .016, POD_T = .972, PODS = 10.8;   // Parkplatz nach dem Ziel, Siegerpodest (Pfadparameter, Abstand zur Pfadmitte)
   const tFor = pct => START_T + Math.max(0, Math.min(1.06, pct)) * (FINISH_T - START_T);
 
   function rng(seed) { let s = seed; return () => (s = (s * 16807) % 2147483647) / 2147483647; }
@@ -70,6 +72,15 @@
       this.r = new Renderer(canvas);
       Object.assign(this.r.env, { sun: [0.42, 0.82, 0.38].map(v => v / Math.hypot(.42, .82, .38)), sky: [0.75, 0.86, 1.0], ground: [0.28, 0.34, 0.22], fog: [0.80, 0.89, 0.90], fogN: 55, fogF: 170 });
       this.path = new Path([[0, 0, 40], [-8, 0, 30], [5, 0, 20], [12, 0, 9], [3, 0, 0], [-9, 0, -7], [-12, 0, -17], [-2, 0, -26], [9, 0, -33], [13, 0, -42]]);
+      // Kurvenradius je Pfadstelle (mit Vorlauf): auf der Kurveninnenseite werden Spuren, Wegrand und Wanderer gestaucht,
+      // damit die verbreiterte Strecke in engen Kurven nicht über den Kurvenmittelpunkt hinausragt
+      { const P = this.path, T = P.total, N = 600, Rr = new Float32Array(N + 1), Sg = new Int8Array(N + 1);
+        for (let i = 0; i <= N; i++) { const t = i / N, a = P.at(t - 1.5 / T), c = P.at(t + 1.5 / T), q = P.at(t);
+          let d = Math.atan2(c.tan[2], c.tan[0]) - Math.atan2(a.tan[2], a.tan[0]); while (d > PI) d -= 2 * PI; while (d < -PI) d += 2 * PI;
+          Rr[i] = Math.min(99, 3 / Math.max(1e-6, Math.abs(d))); Sg[i] = Math.sign((c.tan[0] - a.tan[0]) * q.side[0] + (c.tan[2] - a.tan[2]) * q.side[2]) || 1; }
+        const Rm = Rr.map((_, i) => { let m = 99, s = Sg[i]; for (let j = Math.max(0, i - 8); j <= Math.min(N, i + 8); j++) if (Rr[j] < m) { m = Rr[j]; s = Sg[j]; } return m; });
+        const Sm = Rr.map((_, i) => { let m = 99, s = Sg[i]; for (let j = Math.max(0, i - 8); j <= Math.min(N, i + 8); j++) if (Rr[j] < m) { m = Rr[j]; s = Sg[j]; } return s; });
+        this.bend = t => { const i = Math.max(0, Math.min(N, Math.round(t * N))); return [Rm[i], Sm[i]]; }; }
       this.racers = new Map(); this.parts = []; this.t0 = performance.now(); this.running = false;
       this.cam = { yaw: 0, pitch: 1.35, dist: 140, target: [0, 0, -2], fov: .8 };   // Start hoch oben → Anflug
       this.want = null; this.mode = 'overview';
@@ -99,10 +110,14 @@
       // Zuschauerplätze (fest, damit dort nichts wächst)
       const CR = rng(99); this.crowdSpots = [];
       [[.035, 1], [.19, -1], [.33, 1], [.47, -1], [.6, 1], [.74, -1], [.86, 1]].concat(this.planArena ? [] : [[.945, -1]]).forEach(([t, sd], gi) => {
-        const q = P.at(t), cx = q.p[0] + q.side[0] * sd * 6.9, cz = q.p[2] + q.side[2] * sd * 6.9, n = gi === 0 || gi === 7 ? 6 : 3 + Math.floor(CR() * 2), members = [];
-        for (let i = 0; i < n; i++) { const along = (i - (n - 1) / 2) * 1.35, back = (i % 2) * .9;
-          const x = cx + q.tan[0] * along + q.side[0] * sd * back, z = cz + q.tan[2] * along + q.side[2] * sd * back;
-          members.push({ x, z, yaw: Math.atan2(sd * q.side[2], -sd * q.side[0]) + (CR() - .5) * .4 }); this.addObs(x, z, .5); }
+        const q = P.at(t), n = gi === 0 || gi === 7 ? 6 : 3 + Math.floor(CR() * 2), members = [], rnd = [...Array(n)].map(() => CR());
+        const spots = s => [...Array(n)].map((_, i) => { const along = (i - (n - 1) / 2) * 1.35, back = (i % 2) * .9, o = 6.9 + TW + back;
+          return [q.p[0] + q.side[0] * s * o + q.tan[0] * along, q.p[2] + q.side[2] * s * o + q.tan[2] * along]; });
+        const ok = s => spots(s).every(([x, z]) => P.dist(x, z) > 4.4 + TW + 1.2);
+        if (!ok(sd) && ok(-sd)) sd = -sd;                       // zwischen zwei nahen Streckenteilen kein Platz: andere Wegseite
+        const cx = q.p[0] + q.side[0] * sd * (6.9 + TW), cz = q.p[2] + q.side[2] * sd * (6.9 + TW);
+        spots(sd).forEach(([x, z], i) => { if (P.dist(x, z) <= 4.4 + TW + 1.2) return;
+          members.push({ x, z, yaw: Math.atan2(sd * q.side[2], -sd * q.side[0]) + (rnd[i] - .5) * .4 }); this.addObs(x, z, .5); });
         this.crowdSpots.push({ x: cx, z: cz, t, sd, members });
       });
       this.arena = null; if (this.planArena) this.planArena(P);
@@ -123,13 +138,15 @@
       const PD = this.pond;
       if (PD) this.addObs(PD.x, PD.z, PD.r + .3);
       const MS = this.massif;
-      const reserved = (x, z, r) => this.crowdSpots.some(c => Math.hypot(c.x - x, c.z - z) < r + 4.2) || (PD && Math.hypot(PD.x - x, PD.z - z) < PD.r + 3.2 + r) || (MS && Math.hypot(MS.x - x, MS.z - z) < MS.R + 1.5 + r) || (this.farm && this.farmReserved(x, z, r)) || (this.arena && this.arenaReserved(x, z, r)) || (this.sceneReserved && this.sceneReserved(x, z, r));
-      const baseH = (x, z) => { const d = P.dist(x, z), k = Math.min(1, Math.max(0, (d - 7) / 12));
+      { const q = P.at(POD_T); this.podPlan = { x: q.p[0] + q.side[0] * (PODS - 1.3), z: q.p[2] + q.side[2] * (PODS - 1.3) }; }
+      const POD = this.podPlan, reserved = (x, z, r) => Math.hypot(POD.x - x, POD.z - z) < 5.4 + r || this.crowdSpots.some(c => Math.hypot(c.x - x, c.z - z) < r + 4.2) || (PD && Math.hypot(PD.x - x, PD.z - z) < PD.r + 3.2 + r) || (MS && Math.hypot(MS.x - x, MS.z - z) < MS.R + 1.5 + r) || (this.farm && this.farmReserved(x, z, r)) || (this.arena && this.arenaReserved(x, z, r)) || (this.sceneReserved && this.sceneReserved(x, z, r));
+      const baseH = (x, z) => { const d = P.dist(x, z), k = Math.min(1, Math.max(0, (d - 7 - TW) / 12));
         return k * (Math.sin(x * .08) * 2.2 + Math.cos(z * .07 + 1) * 1.8 + Math.sin((x + z) * .15) * .7 + 1.2); };
       if (this.farm) this.farm.level = baseH(this.farm.x, this.farm.z);
       const height0 = (x, z) => { const h0 = this.farm ? this.farmHeight(x, z, baseH(x, z)) : baseH(x, z); if (!PD) return h0; const dp = Math.hypot(x - PD.x, z - PD.z); if (dp > PD.r + 7) return h0;
         if (dp < PD.r) return PD.y - .15 - 1.5 * (1 - (dp / PD.r) ** 2);
-        const lvl = PD.y + .22; return lvl + (h0 - lvl) * smooth(PD.r, PD.r + 7, dp); };
+        const lvl = PD.y + .22, hb = lvl + (h0 - lvl) * smooth(PD.r, PD.r + 7, dp), dt = P.dist(x, z);   // Teichufer, aber die (verbreiterte) Strecke bleibt flach
+        return dt < 9.6 + TW ? h0 + (hb - h0) * smooth(4.6 + TW, 9.6 + TW, dt) : hb; };
       const height = (x, z) => { const h = height0(x, z); return this.streamCarve ? this.streamCarve(x, z, h) : h; };   // Bachbett
       this.height = height;
       this.stream = this.games = null; if (this.planScenes) this.planScenes(P);   // braucht das Gelände (Bach fliesst bergab)
@@ -150,12 +167,12 @@
       const world = new Node();
       world.add(new Node(ground));
       // Pfad als Band
-      const pathGeo = G.custom(B => { const col = [], W = 4.4, n = 260;
+      const pathGeo = G.custom(B => { const col = [], W = 4.4 + TW, n = 260;
         const dirt = s => { const a = Math.abs(s); let c = hx('#9a7748'); if (Math.abs(a - .45) < .1) c = hx('#7f6038'); if (a > .85) c = mix(c, hx('#6f8a3f'), (a - .85) / .15); if (this.season === 'winter' && a > .6) c = mix(c, hx('#eef2f6'), Math.min(1, (a - .6) / .3)); return c; };
         const cols = [-1, -.85, -.55, -.35, 0, .35, .55, .85, 1];
-        for (let i = 0; i < n; i++) { const A = P.at(i / n), Bq = P.at((i + 1) / n);
+        for (let i = 0; i < n; i++) { const A = { ...P.at(i / n), t: i / n }, Bq = { ...P.at((i + 1) / n), t: (i + 1) / n };
           for (let k = 0; k < cols.length - 1; k++) { const s0 = cols[k], s1 = cols[k + 1];
-            const p = (q, s) => [q.p[0] + q.side[0] * s * W, .04, q.p[2] + q.side[2] * s * W];
+            const p = (q, s) => { const o = this.lat(q.t, s * W, W); return [q.p[0] + q.side[0] * o, .04, q.p[2] + q.side[2] * o]; };
             const a = p(A, s0), b = p(A, s1), c = p(Bq, s1), d = p(Bq, s0);
             B.tri(a, c, b); B.tri(a, d, c);
             const n1 = (R() - .5) * .08, cc = dirt((s0 + s1) / 2).map(v => v + n1); for (let m = 0; m < 6; m++) col.push(...cc); } }
@@ -193,7 +210,7 @@
       let placed = 0;
       for (let tries = 0; tries < 6000 && placed < 300; tries++) {
         const x = (R() - .5) * 180, z = -100 + R() * 170, d = P.dist(x, z);
-        if (d < 7.2) continue;
+        if (d < 7.2 + TW) continue;
         if (d > 22 && R() < .45) continue;               // dichter am Pfad
         const h = 5 + R() * 6 * (d < 12 ? .7 : 1), k = R();
         if (reserved(x, z, 1.5)) continue;
@@ -224,9 +241,9 @@
       const stump = (x, y, z) => { const g = new Node().at(x, y, z); g.add(new Node(G.cyl(.55, .7, .7, 9), '#7a5532').at(0, .35, 0), new Node(G.cyl(.5, .5, .02, 9), '#c9a26b').at(0, .71, 0));
         for (let i = 0; i < 3; i++) g.add(new Node(G.dome(.22, 7, 2), '#d9a85a').at(.55, .2 + i * .15, (i - 1) * .25).rotate(0, 0, -1.3).scale(1, .5, 1));
         if (W) g.add(new Node(G.cyl(.5, .5, .1, 9), SNOW).at(0, .76, 0)); return g; };
-      for (let i = 0; i < 230; i++) { const t = R(), q = P.at(t), side = R() < .5 ? -1 : 1, off = 5.9 + R() * 9;
+      for (let i = 0; i < 230; i++) { const t = R(), q = P.at(t), side = R() < .5 ? -1 : 1, off = 5.9 + TW + R() * 9;
         const x = q.p[0] + q.side[0] * side * off, z = q.p[2] + q.side[2] * side * off, y = height(x, z), k = R(), rr = R();
-        if (reserved(x, z, 1.2)) continue;
+        if (reserved(x, z, 1.2) || P.dist(x, z) < 4.4 + TW + 1.3) continue;
         if (k < .14) { const r = .35 + rr * .5; deco.add(new Node(G.rock(r, 1 + (i % 9)), mix(hx('#8d9399'), hx('#b4b8bc'), R())).at(x, y + .1, z)); this.addObs(x, z, r * 1.1); }
         else if (k < .22) { const r = .9 + rr * .9; deco.add(mossRock(x, y, z, r)); this.addObs(x, z, r * 1.15); }
         else if (k < .32) { deco.add(berries(x, y, z)); this.addObs(x, z, .95); }
@@ -238,12 +255,12 @@
         else { deco.add(stump(x, y, z)); this.addObs(x, z, .85); }
       }
       // Hexenring aus Pilzen und ein Steinmannli
-      { const q = P.at(.36), x = q.p[0] + q.side[0] * 9, z = q.p[2] + q.side[2] * 9, y = height(x, z), m = new Node().at(x, y, z);
+      { const q = P.at(.36), x = q.p[0] + q.side[0] * (9 + TW), z = q.p[2] + q.side[2] * (9 + TW), y = height(x, z), m = new Node().at(x, y, z);
         for (let i = 0; i < 11; i++) { const a = i / 11 * PI * 2; amanita(m, Math.cos(a) * 1.6, Math.sin(a) * 1.6, .8 + R() * .3); this.addObs(x + Math.cos(a) * 1.6, z + Math.sin(a) * 1.6, .35); } deco.add(m); }
-      { const q = P.at(.62), x = q.p[0] - q.side[0] * 7.5, z = q.p[2] - q.side[2] * 7.5, y = height(x, z), m = new Node().at(x, y, z);
+      { const q = P.at(.62), x = q.p[0] - q.side[0] * (7.5 + TW), z = q.p[2] - q.side[2] * (7.5 + TW), y = height(x, z), m = new Node().at(x, y, z);
         [.7, .55, .42, .3].forEach((r, i) => m.add(new Node(G.rock(r, 3 + i), '#9aa1a8').at((R() - .5) * .1, .3 + i * .5, 0).scale(1, .7, 1))); deco.add(m); this.addObs(x, z, .85); }
       // Eulen-Baumstumpf
-      { const q = P.at(.48), x = q.p[0] + q.side[0] * 6.2, z = q.p[2] + q.side[2] * 6.2, y = height(x, z); deco.add(stump(x, y, z)); this.addObs(x, z, .9); this.owlSpot = [x, y + .72, z, Math.atan2(q.side[2], -q.side[0])]; }
+      { const q = P.at(.48), x = q.p[0] + q.side[0] * (6.2 + TW), z = q.p[2] + q.side[2] * (6.2 + TW), y = height(x, z); deco.add(stump(x, y, z)); this.addObs(x, z, .9); this.owlSpot = [x, y + .72, z, Math.atan2(q.side[2], -q.side[0])]; }
       // Felsmassiv: Felstürme mit flachen Plateaus (Sprungwege für Steinböcke und Gämsen)
       this.rockNodes = []; this.groundNodes = [];
       if (MS) { const FR = rng(31), cols = ['#9aa1a8', '#8a9096', '#b0b5ba', '#a08f7f', '#7f868c'];
@@ -305,19 +322,22 @@
       }
       // Laternen entlang des Pfads (leuchten in der Dämmerung und nachts)
       this.lamps = new Node();
-      for (let i = 0; i < 12; i++) { const t = .06 + i * .075, q = P.at(t), sd = i % 2 ? 1 : -1, x = q.p[0] + q.side[0] * sd * 5.2, z = q.p[2] + q.side[2] * sd * 5.2, y = height(x, z);
+      for (let i = 0; i < 12; i++) { const t = .06 + i * .075, q = P.at(t); let sd = i % 2 ? 1 : -1;
+        const lx = s => [q.p[0] + q.side[0] * s * (5.2 + TW), q.p[2] + q.side[2] * s * (5.2 + TW)], clr = s => P.dist(...lx(s)) > 4.4 + TW + .5;
+        if (!clr(sd)) { if (clr(-sd)) sd = -sd; else continue; }
+        const [x, z] = lx(sd), y = height(x, z);
         deco.add(new Node(G.cyl(.08, .1, 3, 6), '#2b2d31').at(x, y + 1.5, z), new Node(G.box(.42, .08, .42), '#2b2d31').at(x, y + 3.22, z), new Node(G.cyl(0, .3, .25, 4), '#2b2d31').at(x, y + 3.4, z));
         this.addObs(x, z, .3);
         const bulb = new Node(G.box(.32, .38, .32), '#ffd88a', { emis: 1 }).at(x, y + 3, z); bulb.glow = new Node(G.sphere(.9, 8, 6), '#ffcf70', { emis: 1, alpha: .0 }).at(x, y + 3, z);
         this.lamps.add(bulb, bulb.glow); }
       // Baumstämme quer am Rand
-      for (let i = 0; i < 6; i++) { const q = P.at(.08 + i * .15), s = i % 2 ? 1 : -1, x = q.p[0] + q.side[0] * s * 7.4, z = q.p[2] + q.side[2] * s * 7.4, ry = R() * PI;
-        if (reserved(x, z, 1.6)) continue;
+      for (let i = 0; i < 6; i++) { const q = P.at(.08 + i * .15), s = i % 2 ? 1 : -1, x = q.p[0] + q.side[0] * s * (7.4 + TW), z = q.p[2] + q.side[2] * s * (7.4 + TW), ry = R() * PI;
+        if (reserved(x, z, 1.6) || P.dist(x, z) < 4.4 + TW + 1.8) continue;
         deco.add(new Node(G.cyl(.32, .32, 2.6, 8), '#7a5532').at(x, height(x, z) + .3, z).rotate(PI / 2, ry, 0));
         for (const f of [-1, 0, 1]) this.addObs(x + Math.sin(ry) * f * 1.1, z + Math.cos(ry) * f * 1.1, .5); }
       // Start- und Zieltor
       const gate = (t, finish) => { const q = this.path.at(t), g = new Node().at(q.p[0], 0, q.p[2]); g.rot = [0, Math.atan2(q.tan[0], q.tan[2]), 0];
-        const W = 5.2; g.add(new Node(G.cyl(.25, .3, 5, 8), '#7a5532').at(-W, 2.5, 0), new Node(G.cyl(.25, .3, 5, 8), '#7a5532').at(W, 2.5, 0));
+        const W = 5.2 + TW; g.add(new Node(G.cyl(.25, .3, 5, 8), '#7a5532').at(-W, 2.5, 0), new Node(G.cyl(.25, .3, 5, 8), '#7a5532').at(W, 2.5, 0));
         if (finish) { for (let i = 0; i < 14; i++) for (let j = 0; j < 2; j++) g.add(new Node(G.box(W * 2 / 14, .45, .2), (i + j) % 2 ? '#111111' : '#ffffff').at(-W + (i + .5) * W * 2 / 14, 4.35 + j * .45, 0)); }
         else g.add(new Node(G.box(W * 2 + .4, 1, .22), '#e63946').at(0, 4.55, 0), new Node(G.box(W * 2 + .45, .12, .25), '#ffffff').at(0, 4.0, 0));
         for (const x of [-W, W]) g.add(new Node(G.cyl(.02, .02, 1.4, 4), '#555').at(x, 5.7, 0), new Node(G.box(.02, .55, .8), finish ? '#ffd23f' : '#3a86ff').at(x, 6.1, .4));
@@ -326,15 +346,35 @@
         for (const sx of [-W, W]) { const th = g.rot[1]; this.addObs(q.p[0] + Math.cos(th) * sx, q.p[2] - Math.sin(th) * sx, .5); }
         return g; };
       deco.add(gate(START_T - .012, false), gate(FINISH_T, true));
-      // Siegerpodest hinter dem Ziel
-      const pq = this.path.at(.975), pod = new Node().at(pq.p[0] + pq.side[0] * 7, 0, pq.p[2] + pq.side[2] * 7);
-      pod.rot = [0, Math.atan2(pq.tan[0], pq.tan[2]), 0];
-      pod.add(new Node(G.box(1.6, 1.4, 1.6), '#ffd23f').at(0, .7, 0), new Node(G.box(1.6, 1.0, 1.6), '#c0c7cf').at(-1.6, .5, 0), new Node(G.box(1.6, .7, 1.6), '#cd7f32').at(1.6, .35, 0));
-      deco.add(pod); { const th = pod.rot[1]; for (const lx of [-1.6, 0, 1.6]) this.addObs(pod.pos[0] + Math.cos(th) * lx, pod.pos[2] - Math.sin(th) * lx, 1.15); }
+      // Siegerpodest hinter dem Ziel: klassisch 2 – 1 – 3 mit grossen Zahlen, Rückwand und rotem Teppich
+      { const q = this.path.at(POD_T), sd = q.side, tn = q.tan, th = Math.atan2(-tn[2], tn[0]);
+        // lokales System des Podests: u = entlang der Strecke (für Zuschauer auf der Strecke: +u = rechts), v = weg von der Strecke
+        const R = Math.sign(tn[0] * -sd[2] + tn[2] * sd[0]) || 1;
+        const W = (u, v) => [q.p[0] + tn[0] * u * R + sd[0] * v, q.p[2] + tn[2] * u * R + sd[2] * v];
+        const gy = this.height(...W(0, PODS)), face = Math.atan2(sd[2], -sd[0]);   // Blickrichtung zur Strecke
+        const pod = new Node(); this.podium = { q, R, W, gy, face, slots: [] };
+        const blk = (u, h, w, top, n) => { const [x, z] = W(u, PODS), b = new Node().at(x, gy, z); b.rot = [0, face, 0];
+          b.add(new Node(G.box(1.5, h + .4, w), '#f4f4f1').at(0, h / 2 - .2, 0), new Node(G.box(1.56, .07, w + .06), top).at(0, h + .03, 0),
+            new Node(G.box(.06, h - .12, w * .92), top).at(.75, h / 2, 0));
+          const px = Math.min(.085, (h - .16) / 9.6), pl = Models.plate(n, px, top, 2); pl.pos = [.78, h / 2 + .02, 0]; pl.rot = [0, PI / 2, 0]; b.add(pl);
+          pod.add(b); this.addObs(x, z, .95); return h + .06; };
+        // Plätze 1–3: Mitte hoch (1), links (2), rechts (3) – aus Sicht der Strecke
+        this.podium.slots.push({ u: 0, v: PODS, y: gy + blk(0, 1.25, 1.5, '#ffd23f', '1') }, { u: -1.55, v: PODS, y: gy + blk(-1.55, .88, 1.5, '#c0c7cf', '2') }, { u: 1.55, v: PODS, y: gy + blk(1.55, .58, 1.5, '#cd7f32', '3') });
+        // Rückwand mit Zielflaggen-Muster und Schriftzug
+        { const [x, z] = W(0, PODS + 1.15), b = new Node().at(x, gy, z); b.rot = [0, face, 0];
+          for (const s of [-1, 1]) b.add(new Node(G.cyl(.07, .07, 3.3, 6), '#555a60').at(0, 1.65, s * 2.9));
+          b.add(new Node(G.box(.08, 1.7, 5.8), '#1d3557').at(0, 2.35, 0));
+          for (let i = 0; i < 16; i++) for (let j = 0; j < 2; j++) b.add(new Node(G.box(.09, .2, .3625), (i + j) % 2 ? '#111111' : '#ffffff').at(.01, 3.0 + j * .2, -2.9 + (i + .5) * .3625));
+          const tx = Models.plate('SIEGER', .055, '#ffd23f', 6); tx.pos = [.06, 2.15, 0]; tx.rot = [0, PI / 2, 0]; b.add(tx);
+          for (const s of [-1, 1]) { const st = new Node().at(0, 2.1, s * 2.1); st.add(new Node(G.cyl(.18, .18, .04, 5), '#ffd23f', { emis: .3 }).rotate(0, 0, PI / 2)); b.add(st); }
+          pod.add(b); for (const s of [-2.6, -1, 1, 2.6]) { const [ox, oz] = W(s, PODS + 1.15); this.addObs(ox, oz, .4); } }
+        // roter Teppich von der Strecke zum Podest
+        { const v0 = 6.4 + TW - 2.0, v1 = PODS - .8, [x, z] = W(0, (v0 + v1) / 2), c = new Node(G.box(v1 - v0, .03, 1.4), '#b3121b').at(x, this.height(x, z) + .03, z); c.rot = [0, face, 0]; pod.add(c); }
+        deco.add(pod); }
       // Zwischenziel-Tore bei 25 / 50 / 75 % (Bronze, Silber, Gold)
       this.signs = [];
       [[.25, '#cd7f32'], [.5, '#c0c7cf'], [.75, '#ffd23f']].forEach(([pc, col]) => {
-        const q = this.path.at(tFor(pc)), g = new Node().at(q.p[0], 0, q.p[2]), th = Math.atan2(q.tan[0], q.tan[2]), Wd = 5.2, txt = Math.round(pc * 100) + ' %';
+        const q = this.path.at(tFor(pc)), g = new Node().at(q.p[0], 0, q.p[2]), th = Math.atan2(q.tan[0], q.tan[2]), Wd = 5.2 + TW, txt = Math.round(pc * 100) + ' %';
         g.rot = [0, th, 0];
         for (const sx of [-Wd, Wd]) { g.add(new Node(G.cyl(.22, .28, 4.4, 8), '#f4f1ea').at(sx, 2.2, 0), new Node(G.cyl(.3, .3, .25, 8), col).at(sx, 4.45, 0), new Node(G.sphere(.32, 8, 6), col).at(sx, 4.75, 0));
           for (let i = 0; i < 4; i++) g.add(new Node(G.box(.46, .12, .46), i % 2 ? col : '#f4f1ea').at(sx, .6 + i * .9, 0));
@@ -550,8 +590,8 @@
     }
     movePeople(t, dt) {
       const T = this.path.total, racers = [...this.racers.values()];
-      const nearest = (x, z, max) => { let best = null, bd = max * max; for (const r of racers) { const dx = r.node.pos[0] - x, dz = r.node.pos[2] - z, d = dx * dx + dz * dz; if (d < bd) { bd = d; best = r; } } return best ? [best, Math.sqrt(bd)] : null; };
-      const lookYaw = (x, z, yaw, r) => { if (!r) return 0; let d = Math.atan2(-(r.node.pos[2] - z), r.node.pos[0] - x) - yaw; while (d > PI) d -= 2 * PI; while (d < -PI) d += 2 * PI; return Math.max(-1.3, Math.min(1.3, d)); };
+      const nearest = (x, z, max) => { let best = null, bd = max * max; for (const r of racers) { const rp = this.rp(r), dx = rp[0] - x, dz = rp[2] - z, d = dx * dx + dz * dz; if (d < bd) { bd = d; best = r; } } return best ? [best, Math.sqrt(bd)] : null; };
+      const lookYaw = (x, z, yaw, r) => { if (!r) return 0; const rp = this.rp(r); let d = Math.atan2(-(rp[2] - z), rp[0] - x) - yaw; while (d > PI) d -= 2 * PI; while (d < -PI) d += 2 * PI; return Math.max(-1.3, Math.min(1.3, d)); };
       if (this.arenaTick) this.arenaTick(dt);
       for (const c of this.crowd) {
         const n = nearest(c.x, c.z, 32); c.excite = Math.max(0, c.excite - dt);
@@ -560,21 +600,21 @@
         c.cheer += (want - c.cheer) * Math.min(1, dt * 3);
         Models.animatePerson(c.node, t, false, c.cheer, n ? lookYaw(c.x, c.z, c.yaw, n[0]) : 0);
       }
-      this.dyn = racers.map(r => [r.node.pos[0], r.node.pos[2], 1.5, null]);
+      this.dyn = racers.flatMap(r => r.fig ? [[r.node.pos[0], r.node.pos[2], 1.3 * (this.carScale || 1), null], [r.fig.pos[0], r.fig.pos[2], .45, null]] : [[r.node.pos[0], r.node.pos[2], 1.3 * (this.carScale || 1), null]]);
       for (const h of this.hikers) {
         if (h.pause > 0) { h.pause -= dt; } else { h.t += h.dir * h.speed * dt / T; h.nextPause -= dt;
           if (h.t > .985) { h.t = .985; h.dir = -1; } if (h.t < .01) { h.t = .01; h.dir = 1; }
           if (h.nextPause < 0) { h.pause = 4 + Math.random() * 5; h.nextPause = 15 + Math.random() * 25; } }
         // Wanderer weichen am Wegrand aus: Pfosten, Laternen, Fans und anderen Wanderern (seitlich versetzen, sonst kurz warten)
-        const q = this.path.at(h.t), qa = this.path.at(Math.max(.005, Math.min(.995, h.t + h.dir * 1.4 / T)));
-        const spot = (qq, off) => [qq.p[0] + qq.side[0] * h.side * off, qq.p[2] + qq.side[2] * h.side * off];
+        const ta = Math.max(.005, Math.min(.995, h.t + h.dir * 1.4 / T)), q = { ...this.path.at(h.t), t: h.t }, qa = { ...this.path.at(ta), t: ta };
+        const spot = (qq, off) => { const o = this.lat(qq.t, h.side * off); return [qq.p[0] + qq.side[0] * o, qq.p[2] + qq.side[2] * o]; };
         const free = (qq, off) => { const [px, pz] = spot(qq, off); if (this.obsBlocked(px, pz, .34)) return false;
           for (const o of this.hikers) if (o !== h && o.xz && Math.hypot(o.xz[0] - px, o.xz[1] - pz) < .85) return false; return true; };
-        if (h.off === undefined) { h.off = 4.65; h.want = 4.65; }
-        if (!free(q, h.want) || !free(qa, h.want)) { const alt = [4.65, 4.1, 3.6, 5.15, 3.1, 2.6].find(o => free(q, o) && free(qa, o)); if (alt === undefined) h.pause = Math.max(h.pause, .5); else h.want = alt; }
-        else if (h.want !== 4.65 && free(q, 4.65) && free(qa, 4.65)) h.want = 4.65;
+        const HK = 4.65 + TW; if (h.off === undefined) { h.off = HK; h.want = HK; }
+        if (!free(q, h.want) || !free(qa, h.want)) { const alt = [HK, HK - .3, HK + 1.1, HK + 1.55, HK - .5, HK + 2].find(o => free(q, o) && free(qa, o)); if (alt === undefined) h.pause = Math.max(h.pause, .5); else h.want = alt; }
+        else if (h.want !== HK && free(q, HK) && free(qa, HK)) h.want = HK;
         h.off += Math.max(-1.4 * dt, Math.min(1.4 * dt, h.want - h.off));
-        const x = q.p[0] + q.side[0] * h.side * h.off, z = q.p[2] + q.side[2] * h.side * h.off; h.xz = [x, z];
+        const [x, z] = spot(q, h.off); h.xz = [x, z];
         const yaw = h.pause > 0 ? Math.atan2(h.side * q.side[2], -h.side * q.side[0]) : Math.atan2(-q.tan[2] * h.dir, q.tan[0] * h.dir);
         let dy = yaw - h.node.rot[1]; while (dy > PI) dy -= 2 * PI; while (dy < -PI) dy += 2 * PI;
         h.node.pos = [x, this.height(x, z), z]; h.node.rot = [0, h.node.rot[1] + dy * Math.min(1, dt * 4), 0];
@@ -584,7 +624,7 @@
       }
     }
     cheerNear(id) { const r = this.racers.get(id); if (!r || !this.crowd) return;
-      for (const c of this.crowd) if (Math.hypot(c.x - r.node.pos[0], c.z - r.node.pos[2]) < 45) c.excite = 2.5 + Math.random(); }
+      for (const c of this.crowd) if (Math.hypot(c.x - this.rp(r)[0], c.z - this.rp(r)[2]) < 45) c.excite = 2.5 + Math.random(); }
 
     // ---------- Zeit, Sonne, Himmel ----------
     now() { return new Date(Date.now() + this.timeOffset); }
@@ -689,7 +729,7 @@
       // Ziel mit freier Sichtlinie bevorzugen (vermeidet Sackgassen zwischen Bäumen)
       this.pickTarget = a => { let fallback = null;
         for (let i = 0; i < 60; i++) { const x = a.x + (R() - .5) * 26, z = a.z + (R() - .5) * 26, pd = P.dist(x, z);
-          if (!(Math.abs(x) < 62 && z > -82 && z < 50 && pd > (R() < .12 ? 0 : 7) && pd < 24 && !this.blocked(x, z, a.rad + .4) && !this.inPond(x, z, a.rad + 1) && !(this.farm && this.inFarm(x, z, a.rad + 1.5)) && !(this.games && Math.hypot(x - this.games.x, z - this.games.z) < 9.5))) continue;
+          if (!(Math.abs(x) < 62 && z > -82 && z < 50 && pd > (R() < .12 ? 0 : 7 + TW) && pd < 24 && !this.blocked(x, z, a.rad + .4) && !this.inPond(x, z, a.rad + 1) && !(this.farm && this.inFarm(x, z, a.rad + 1.5)) && !(this.games && Math.hypot(x - this.games.x, z - this.games.z) < 9.5))) continue;
           if (this.lineFree(a.x, a.z, x, z, a.rad)) { a.tx = x; a.tz = z; return; } if (!fallback) fallback = [x, z]; }
         if (fallback) { a.tx = fallback[0]; a.tz = fallback[1]; } else { a.tx = a.x; a.tz = a.z; } };
     }
@@ -755,33 +795,69 @@
 
     // ---------- Fahrer ----------
     setRacers(list, meId) {
-      const seen = new Set();
+      const seen = new Set(), n = Math.max(1, list.length);
+      // Spuren: alle nebeneinander, gleichmässig über die verbreiterte Strecke verteilt; Fahrzeuggrösse passt sich der Spurbreite an
+      const sp = n > 1 ? Math.min(1.6, LANE_HALF * 2 / (n - 1)) : 1.6, sc = Math.max(.42, Math.min(1.05, (sp - .06) / 1.24));
+      this.carScale = sc;
+      // Rangfolge im Ziel: mehr % zuerst; bei gleichen % zählt, wer diesen Stand früher erreicht hat
+      const done = list.filter(x => x.pct >= 1).sort((a, b) => (Math.abs(b.pct - a.pct) > 1e-9 ? b.pct - a.pct : 0) || (a.reachedAt || 0) - (b.reachedAt || 0) || String(a.name).localeCompare(String(b.name)));
+      const podRank = new Map(done.map((x, i) => [x.id, i + 1]));
       list.forEach((x, i) => {
         seen.add(x.id);
         let r = this.racers.get(x.id);
-        const sig = JSON.stringify(x.look);
-        if (!r || r.sig !== sig) {
-          const node = Models.build(x.look); node.scl = [1.3, 1.3, 1.3]; node.cull = 3.5;
-          if (!r) {
-            r = { id: x.id, cur: tFor(0), boost: 0, label: document.createElement('button') };
-            r.label.className = 'lbl'; r.label.onclick = () => this.opts.onSelect && this.opts.onSelect(x.id);
-            this.layer.appendChild(r.label);
-          }
-          r.node = node; r.sig = sig;
-          this.racers.set(x.id, r);
+        const isDone = x.pct >= 1, sig = JSON.stringify(x.look);
+        if (!r) {
+          r = { id: x.id, cur: tFor(0), boost: 0, stagger: 0, label: document.createElement('button') };
+          r.label.className = 'lbl'; r.label.onclick = () => this.opts.onSelect && this.opts.onSelect(x.id);
+          this.layer.appendChild(r.label); this.racers.set(x.id, r);
         }
-        const lanes = [0, -2, 2, -3.4, 3.4, -1, 1, -2.7, 2.7, -.5, .5, -1.5, 1.5, -3, 3, 0, -2.2, 2.2, -.9, .9];
-        r.lane = lanes[i % lanes.length]; r.stagger = ((i * 37) % 7) * .0009;
-        r.target = tFor(x.pct); r.data = x; r.me = x.id === meId;
-        r.label.classList.toggle('me', r.me); r.label.classList.toggle('done', x.pct >= 1);
-        r.label.innerHTML = `<b style="background:${x.look.suit || '#3a86ff'};color:${ink(x.look.suit || '#3a86ff')}">${esc(x.look.initials || initials(x.name))}</b><span>${Math.round(x.pct * 100)}%</span>`;
+        if (!isDone && r.fig) { r.fig = null; r.walk = null; r.sig = null; }          // Korrektur unter 100 %: wieder einsteigen
+        if (r.fig && r.sig !== sig) { const p = r.fig.pos.slice(), ro = r.fig.rot.slice(); r.fig = this.podFigure(x.look); r.fig.pos = p; r.fig.rot = ro; }
+        if (r.sig !== sig || r.empty !== !!r.fig) {
+          const node = Models.build(r.fig ? { ...x.look, empty: true } : x.look);
+          if (r.node) { node.pos = r.node.pos; node.rot = r.node.rot; }
+          r.node = node; r.sig = sig; r.empty = !!r.fig;
+        }
+        r.node.scl = [sc, sc, sc]; r.node.cull = 3.5 * sc / 1.3;
+        r.lane = (i - (n - 1) / 2) * sp; r.li = i; r.stagger = 0;
+        r.done = isDone; r.rank = podRank.get(x.id) || 0;
+        r.target = isDone ? PARK_T : tFor(x.pct); r.data = x; r.me = x.id === meId;
+        r.label.classList.toggle('me', r.me); r.label.classList.toggle('done', isDone);
+        const medal = r.rank === 1 ? '🥇 ' : r.rank === 2 ? '🥈 ' : r.rank === 3 ? '🥉 ' : r.rank ? r.rank + '. ' : '';
+        r.label.innerHTML = `<b style="background:${x.look.suit || '#3a86ff'};color:${ink(x.look.suit || '#3a86ff')}">${esc(x.look.initials || initials(x.name))}</b><span>${medal}${Math.round(x.pct * 100)}%</span>`;
       });
       for (const [id, r] of this.racers) if (!seen.has(id)) { r.label.remove(); this.racers.delete(id); }
       this.meId = meId;
     }
+    podFigure(look) { const f = Models.person(look, 'cheer'); f.scl = [1.05, 1.05, 1.05]; f.cull = 2.5; return f; }
+    // Ausgestiegene Fahrer·innen: laufen vom geparkten Fahrzeug zu ihrem Platz auf dem Podest (Plätze tauschen live)
+    updatePodium(t, dt) {
+      const P = this.podium; if (!P) return;
+      if (!P.ready) { P.ready = true;    // Ehrenreihen für Plätze 4+ vor dem Podest: nur freie Plätze (Absperrungen, Laternen, Fans meiden)
+        const seen = new Set(), obs = []; for (const l of this.obs.values()) for (const o of l) if (!seen.has(o)) { seen.add(o); obs.push(o); }
+        for (let row = 0; row < 4; row++) for (let col = 0; col < 11; col++) { const u = -4 + col * .8, v = PODS - 1.55 - row * .8, [x, z] = P.W(u, v);
+          if (this.path.dist(x, z) < 4.4 + TW + .5 || obs.some(o => Math.hypot(o[0] - x, o[1] - z) < o[2] + .45) || (this.crowd || []).some(c => Math.hypot(c.x - x, c.z - z) < .8)) continue;
+          P.slots.push({ u, v, y: this.height(x, z) }); }
+        P.slots = [...P.slots.slice(0, 3), ...P.slots.slice(3).sort((a, b) => b.v - a.v || Math.abs(a.u) - Math.abs(b.u) || a.u - b.u)]; }
+      const figs = [...this.racers.values()].filter(r => r.fig).sort((a, b) => a.rank - b.rank);
+      figs.forEach((r, k) => {
+        const s = P.slots[Math.min(k, P.slots.length - 1)], [sx, sz] = P.W(s.u, s.v), f = r.fig;
+        if (!r.slot || r.slot !== s) { r.slot = s; const q = this.path.at(PARK_T + .012), [wx, wz] = [q.p[0] + q.side[0] * r.lane, q.p[2] + q.side[2] * r.lane];
+          r.walk = r.arrived ? [[sx, sz, s.y]] : [[wx, wz, 0], [sx, sz, s.y]]; r.arrived = true; }
+        let moving = false;
+        if (r.walk && r.walk.length) { const w = r.walk[0], dx = w[0] - f.pos[0], dz = w[1] - f.pos[2], d = Math.hypot(dx, dz), step = 1.7 * dt;
+          if (d <= step) { f.pos[0] = w[0]; f.pos[2] = w[1]; r.walk.shift(); } else { f.pos[0] += dx / d * step; f.pos[2] += dz / d * step; f.rot = [0, Math.atan2(-dz, dx), 0]; moving = true; }
+          // Boden bzw. Podeststufe: in der Nähe des Platzes hochsteigen
+          const g = this.height(f.pos[0], f.pos[2]), near = Math.hypot(sx - f.pos[0], sz - f.pos[2]);
+          f.pos[1] = near < .9 ? g + (s.y - g) * Math.min(1, (.9 - near) / .5) : g; }
+        if (!moving) { f.pos[1] = s.y; let d = P.face - f.rot[1]; while (d > PI) d -= 2 * PI; while (d < -PI) d += 2 * PI; f.rot[1] += d * Math.min(1, dt * 4); }
+        const cheer = moving ? 0 : r.rank === 1 ? .9 + .1 * Math.sin(t * 2) : r.rank <= 3 ? (Math.sin(t * .9 + r.li) > .2 ? .7 : .15) : (Math.sin(t * .6 + r.li * 1.7) > .55 ? .5 : 0);
+        Models.animatePerson(f, t, moving, cheer, 0);
+      });
+    }
     boost(id) { const r = this.racers.get(id); if (!r) return; r.boost = 1.6; this.cheerNear(id);
       const R = Math.random;
-      for (let i = 0; i < 10; i++) { const q = r.node.pos; const d = new Node(G.sphere(.25, 6, 4), '#c9b38a', { alpha: .7 }).at(q[0] + (R() - .5), .3 + R() * .4, q[2] + (R() - .5)); d.life = 1 + R() * .6; d.vy = .6 + R(); this.dust.add(d); }
+      for (let i = 0; i < 10; i++) { const q = this.rp(r); const d = new Node(G.sphere(.25, 6, 4), '#c9b38a', { alpha: .7 }).at(q[0] + (R() - .5), .3 + R() * .4, q[2] + (R() - .5)); d.life = 1 + R() * .6; d.vy = .6 + R(); this.dust.add(d); }
       if (r.pop) r.pop.el.remove(); const pop = document.createElement('div'); pop.className = 'pop'; pop.textContent = '+1'; pop.style.opacity = '0'; this.layer.appendChild(pop); r.pop = { el: pop, t: 0 };
     }
 
@@ -864,16 +940,22 @@
       for (const f of this.flyers || []) out.push([f.node, f.kind === 'hawk' ? 'Bussard' : 'Vogel', 0]);
       return out; }
     tap(e) { const rect = this.canvas.getBoundingClientRect(), x = e.clientX - rect.left, y = e.clientY - rect.top; let best = null, bd = 50;
-      for (const r of this.racers.values()) { const s = this.r.project([r.node.pos[0], r.node.pos[1] + 1.2, r.node.pos[2]]); if (!s) continue; const d = Math.hypot(s[0] - x, s[1] - y); if (d < bd) { bd = d; best = r; } }
+      for (const r of this.racers.values()) { const rp = this.rp(r), s = this.r.project([rp[0], rp[1] + 1.2, rp[2]]); if (!s) continue; const d = Math.hypot(s[0] - x, s[1] - y); if (d < bd) { bd = d; best = r; } }
       if (best && this.opts.onSelect) { this.opts.onSelect(best.id); return; }
       let pick = null; bd = 42;
       for (const [n, name, hy] of this.pickables()) { const s = this.r.project([n.pos[0], n.pos[1] + hy, n.pos[2]]); if (!s) continue; const d = Math.hypot(s[0] - x, s[1] - y); if (d < bd) { bd = d; pick = [n, name]; } }
       if (pick) this.track(pick[0], pick[1]); }
     // Zielposition der Kamera hinter einem Fahrer (entlang des Pfads, Blick nach vorn)
+    rp(r) { return (r.fig || r.node).pos; }
+    // seitlicher Abstand zur Pfadmitte, auf der Kurveninnenseite enger Kurven gestaucht (Spuren, Wegrand, Wanderer)
+    lat(t, s, lim) { const [R, sg] = this.bend(t); if (Math.sign(s) !== sg) return s; const cap = R * .8; lim = lim || LANE_HALF + .4;
+      return cap >= lim ? s : s * Math.max(.12, cap / lim); }
     chase(r, base) {
+      if (r.fig && this.podium) { const P = this.podium, q = P.q, f = r.fig.pos, dist = (base || 9) * this.uo.dist, pitch = .3 + this.uo.pitch;
+        return { yaw: Math.atan2(-q.side[0], -q.side[2]) + .25 * P.R + this.uo.yaw, pitch, dist, target: [f[0], f[1] + 1, f[2]] }; }
       const T = this.path.total, tt = r.cur + r.stagger, back = this.path.at(tt - 9 / T), ahead = this.path.at(tt + 7 / T);
       let tx = ahead.p[0] - back.p[0], tz = ahead.p[2] - back.p[2]; const l = Math.hypot(tx, tz) || 1; tx /= l; tz /= l;
-      const yaw0 = Math.atan2(-tx, -tz), dist = (base || 11) * this.uo.dist, pitch = .34 + this.uo.pitch;
+      const yaw0 = Math.atan2(-tx, -tz), dist = (base || 11) * this.uo.dist * Math.max(.62, (this.carScale || 1.3) / 1.3), pitch = .34 + this.uo.pitch;
       // seitlicher Versatz zur Pfadmitte hin, damit keine Bäume im Bild stehen (mit Hysterese)
       const tgt = [r.node.pos[0] + tx * 2.5, 1.6, r.node.pos[2] + tz * 2.5];
       const eyeAt = sd => { const y = yaw0 + sd * .42; return [tgt[0] + Math.sin(y) * Math.cos(pitch) * dist, tgt[2] + Math.cos(y) * Math.cos(pitch) * dist]; };
@@ -884,7 +966,7 @@
       const T = this.tour, racers = [...this.racers.values()];
       T.t += rdt;
       if (T.t > 8) { T.t = 0; this.uo = { yaw: 0, pitch: 0, dist: 1 };
-        const kinds = ['overview', 'leader', 'pond', 'mill', 'farm', 'crowd', 'games', 'rocks', 'animal', 'finish', 'random', 'hiker']; T.i = (T.i + 1) % kinds.length;
+        const kinds = ['overview', 'leader', 'pond', 'mill', 'farm', 'crowd', 'games', 'rocks', 'animal', 'finish', 'podium', 'random', 'hiker']; T.i = (T.i + 1) % kinds.length;
         T.kind = kinds[T.i];
         if (T.kind === 'random' && racers.length) T.racer = racers[Math.floor(Math.random() * racers.length)];
         if (T.kind === 'animal') { const pool = this.animals.filter(a => !a.fixed || Math.random() < .3); T.animal = pool[Math.floor(Math.random() * pool.length)]; }
@@ -895,12 +977,15 @@
       }
       const sway = T.t * .07, NAMES = { bear: 'Bär', deer: 'Reh', stag: 'Hirsch', wolf: 'Wolf', badger: 'Dachs', fox: 'Fuchs', hare: 'Feldhase', squirrel: 'Eichhörnchen', boar: 'Wildschwein', piglet: 'Frischling', hedgehog: 'Igel', owl: 'Eule', ibex: 'Steinbock', ibexF: 'Steingeiss', kid: 'Steinkitz', chamois: 'Gämse' };
       switch (T.kind) {
-        case 'leader': { const r = racers.sort((a, b) => b.target - a.target)[0]; if (r) { this.caption('🎬 Spitzenreiter·in: ' + (r.data ? r.data.name : '')); return this.chase(r); } break; }
+        case 'leader': { const r = racers.sort((a, b) => (b.data ? b.data.pct : 0) - (a.data ? a.data.pct : 0) || (b.rank && a.rank ? a.rank - b.rank : 0))[0]; if (r) { this.caption('🎬 Spitzenreiter·in: ' + (r.data ? r.data.name : '')); return this.chase(r); } break; }
         case 'random': if (T.racer) { this.caption('🎬 Unterwegs mit ' + (T.racer.data ? T.racer.data.name : '')); return this.chase(T.racer, 9); } break;
         case 'crowd': if (T.group) { const q = this.path.at(T.group.t), y = Math.atan2(-T.group.sd * q.side[0], -T.group.sd * q.side[2]);
           this.caption('🎬 Die Fans am Wegrand'); return { yaw: y + Math.sin(T.t * .3) * .5 + this.uo.yaw, pitch: .22 + this.uo.pitch, dist: 10 * this.uo.dist, target: [T.group.x, 2, T.group.z] }; } break;
         case 'animal': if (T.animal) { const p = T.animal.node.pos; this.caption('🎬 Waldbewohner: ' + (NAMES[T.animal.kind] || ''));
           return { yaw: T.yaw0 + sway + this.uo.yaw, pitch: .3 + this.uo.pitch, dist: (T.animal.kind === 'bear' || T.animal.kind === 'stag' ? 8.5 : 6) * this.uo.dist, target: [p[0], p[1] + 1.1, p[2]] }; } break;
+        case 'podium': if (this.podium) { const P = this.podium, q = P.q, [x, z] = P.W(0, PODS - .6), n = [...this.racers.values()].filter(r => r.fig).length;
+          this.caption(n ? '🎬 Siegerpodest – ' + n + ' im Ziel' : '🎬 Das Siegerpodest wartet');
+          return { yaw: Math.atan2(-q.side[0], -q.side[2]) + sway * .5 + this.uo.yaw, pitch: .22 + this.uo.pitch, dist: 12 * this.uo.dist, target: [x, P.gy + 1.4, z] }; } break;
         case 'finish': { const q = this.path.at(FINISH_T); this.caption('🎬 Das Zieltor');
           return { yaw: Math.atan2(-q.tan[0], -q.tan[2]) + .7 + sway + this.uo.yaw, pitch: .2 + this.uo.pitch, dist: 17 * this.uo.dist, target: [q.p[0], 3, q.p[2]] }; }
         case 'rocks': if (this.massif && this.rockLife.length) { const M = this.massif, a = this.rockLife.find(r => r.kind === 'ibex') || this.rockLife[0];
@@ -933,9 +1018,13 @@
         if (Math.abs(diff) < .00005) r.cur = r.target;
         if (r.prevCur !== undefined && r.prevCur < FINISH_T && r.cur >= FINISH_T - 1e-4 && this.finishParty) this.finishParty(r); r.prevCur = r.cur;
         r.boost = Math.max(0, r.boost - dt);
-        const q = this.path.at(r.cur + r.stagger), lane = r.lane;
+        const q = this.path.at(r.cur + r.stagger), lane = this.lat(r.cur + r.stagger, r.lane);
         r.node.pos = [q.p[0] + q.side[0] * lane, 0, q.p[2] + q.side[2] * lane];
         r.node.rot = [0, Math.atan2(-q.tan[2], q.tan[0]), 0];
+        // Ziel erreicht und geparkt: aussteigen, das leere Fahrzeug bleibt stehen
+        if (r.done && !r.fig && r.cur >= PARK_T - .0008) { const L = r.data.look, sc = this.carScale || 1;
+          r.fig = this.podFigure(L); r.fig.pos = [r.node.pos[0] + q.side[0] * .55 * sc, 0, r.node.pos[2] + q.side[2] * .55 * sc]; r.fig.rot = r.node.rot.slice();
+          const node = Models.build({ ...L, empty: true }); node.pos = r.node.pos; node.rot = r.node.rot; node.scl = r.node.scl; node.cull = r.node.cull; r.node = node; r.empty = true; r.arrived = false; r.slot = null; }
         const speed = Math.min(1, Math.abs(diff) * 60 + (r.boost > 0 ? .8 : 0));
         Models.animate(r.node, t, speed);
       }
@@ -943,6 +1032,7 @@
       for (const d of [...this.dust.children]) { d.life -= dt; d.pos[1] += d.vy * dt; d.scl = [1 + (1.6 - d.life), 1 + (1.6 - d.life), 1 + (1.6 - d.life)]; d.alpha = Math.max(0, d.life * .45);
         if (d.life <= 0) this.dust.children.splice(this.dust.children.indexOf(d), 1); }
       this.movePeople(t, dt);
+      this.updatePodium(t, rdt);
       this.updatePond(t, dt);
       this.updateRocks(t, dt);
       this.moveAnimals(t, dt);
@@ -975,10 +1065,10 @@
       const far2 = 42 * 42, L = n => { const dx = n.pos[0] - eye[0], dy = n.pos[1] - eye[1], dz = n.pos[2] - eye[2]; if (dx * dx + dy * dy + dz * dz < far2) return n;
         const l = n.lod || (n.lod = lodOf(n)), b = n.anim && n.anim.bob ? n.anim.bob.pos[1] * n.scl[1] : 0; l.pos = [n.pos[0], n.pos[1] + b, n.pos[2]]; l.rot = n.rot; l.scl = n.scl; return l; };   // Hüpfen bleibt sichtbar
       const clouds = eye[1] > 24 ? [] : this.clouds;   // von oben (Übersicht) verdecken Wolken sonst die Strecke
-      this.r.render([...this.static, ...clouds, this.lamps, ...this.pondLife, this.pondFx, this.water, this.fall, ...this.animals.map(a => L(a.node)), ...this.farmLife.map(f => L(f.node)), ...(this.sceneDyn || []), ...(this.sceneActors || []).map(a => L(a.node)), ...(this.confetti ? [this.confetti] : []), ...this.rockLife.map(a => L(a.n)), ...this.crowd.map(c => L(c.node)), ...this.hikers.map(h => L(h.node)), ...this.flyers.map(f => f.node), ...[...this.racers.values()].map(r => r.node), this.dust, this.motes], { pos: eye, target: c.target, fov: c.fov, near: .5, far: 400 });
+      this.r.render([...this.static, ...clouds, this.lamps, ...this.pondLife, this.pondFx, this.water, this.fall, ...this.animals.map(a => L(a.node)), ...this.farmLife.map(f => L(f.node)), ...(this.sceneDyn || []), ...(this.sceneActors || []).map(a => L(a.node)), ...(this.confetti ? [this.confetti] : []), ...this.rockLife.map(a => L(a.n)), ...this.crowd.map(c => L(c.node)), ...this.hikers.map(h => L(h.node)), ...this.flyers.map(f => f.node), ...[...this.racers.values()].map(r => r.node), ...[...this.racers.values()].filter(r => r.fig).map(r => L(r.fig)), this.dust, this.motes], { pos: eye, target: c.target, fov: c.fov, near: .5, far: 400 });
       // Beschriftungen
       const W = this.canvas.clientWidth, H = this.canvas.clientHeight;
-      for (const r of this.racers.values()) { const s = this.r.project([r.node.pos[0], r.node.pos[1] + 3.1, r.node.pos[2]]); const el = r.label;
+      for (const r of this.racers.values()) { const rp = this.rp(r), s = this.r.project([rp[0], rp[1] + (r.fig ? 2.15 : 2.3 * (this.carScale || 1) + .35 + (r.li % 3) * .5), rp[2]]); const el = r.label;
         if (!s || s[0] < -40 || s[0] > W + 40 || s[1] < -20 || s[1] > H + 20) { el.style.display = 'none'; if (r.pop) { r.pop.el.remove(); r.pop = null; } continue; }
         el.style.display = ''; el.style.transform = `translate(${s[0]}px,${s[1]}px) translate(-50%,-100%)`; el.style.zIndex = String(1000 - Math.round(s[2]));
         if (r.pop) { r.pop.t += dt; const pe = r.pop.el; pe.style.transform = `translate(${s[0]}px,${s[1] - 26 - r.pop.t * 40}px) translate(-50%,-100%)`; pe.style.opacity = String(Math.max(0, 1 - r.pop.t / 1.3)); if (r.pop.t > 1.3) { pe.remove(); r.pop = null; } } }
@@ -1027,5 +1117,5 @@
     return figR.canvas.toDataURL('image/png');
   }
   window.figureThumb = figureThumb;
-  Forest.FINISH_T = FINISH_T; window.Forest = Forest; window.Stage = Stage; window.vehicleThumb = thumb;
+  Forest.FINISH_T = FINISH_T; Forest.TW = TW; window.Forest = Forest; window.Stage = Stage; window.vehicleThumb = thumb;
 })();

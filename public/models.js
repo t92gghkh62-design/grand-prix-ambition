@@ -414,6 +414,16 @@
     return { s, a, seat: [-.05, 1.42, 0], reins: [1.2, 1.58] }; };
 
 
+  // Augen sitzen sichtbar auf der Kopfoberfläche (Ellipsoid c/r, Blickrichtung d, Seite gespiegelt), mit Iris, Pupille und Lichtreflex
+  function eyes(g, c, r, d, er, iris) {
+    for (const sd of [-1, 1]) {
+      const v = [d[0], d[1], d[2] * sd], t = 1 / Math.hypot(v[0] / r[0], v[1] / r[1], v[2] / r[2]), p = v.map((x, i) => c[i] + x * t);
+      const n0 = v.map((x, i) => x / (r[i] * r[i])), nl = Math.hypot(...n0), n = n0.map(x => x / nl), at = k => p.map((x, i) => x + n[i] * er * k);
+      if (iris) g.add(S(er, iris, ...at(-.25)), S(er * .58, '#0d0b0a', ...at(.28))); else g.add(S(er, '#151110', ...at(-.25)));
+      const gl = at(iris ? .78 : .66); gl[1] += er * .32; g.add(S(er * .28, '#ffffff', ...gl));
+    }
+  }
+
   // ---------- Waldtiere ----------
   // Rückgabe: Knoten mit anim.legs (Beine) und anim.head (Kopf-Drehpunkt); vorwärts = +X
   function animal(kind) {
@@ -425,7 +435,7 @@
       s.add(part(G.sphere(.62, 12, 8), c, 0, .82, 0).scale(1.35, .85, .85), part(G.sphere(.4, 10, 7), c, .55, .95, 0), S(.12, '#3a2414', -.75, .95, 0));
       legs([[.5, .3], [.5, -.3], [-.5, .3], [-.5, -.3]], .55, .15, c, '#2b1a0e');
       head.at(.85, 1.0, 0); hs.add(S(.32, c, .1, 0, 0), part(G.sphere(.16, 8, 6), l, .38, -.06, 0).scale(1.2, .85, 1), S(.05, '#111', .55, -.03, 0),
-        S(.03, '#111', .3, .1, .12), S(.03, '#111', .3, .1, -.12), S(.09, c, 0, .26, .2), S(.09, c, 0, .26, -.2));
+        S(.09, c, 0, .26, .2), S(.09, c, 0, .26, -.2));
     } else if (kind === 'deer' || kind === 'stag') {
       const big = kind === 'stag', c = big ? '#7a4a2a' : '#b5763f', k = big ? 1.3 : 1;
       s.add(part(G.sphere(.36 * k, 10, 7), c, 0, .9 * k, 0).scale(1.55, .78, .68), S(.08 * k, '#f4ead8', -.55 * k, .95 * k, 0),
@@ -433,7 +443,6 @@
       legs([[.36 * k, .14 * k], [.36 * k, -.14 * k], [-.36 * k, .14 * k], [-.36 * k, -.14 * k]], .66 * k, .045 * k, c, '#2a1d14');
       head.at(.58 * k, 1.36 * k, 0);
       hs.add(part(G.sphere(.15 * k, 8, 6), c, .06 * k, 0, 0).scale(1.35, 1, .95), S(.04 * k, '#111', .26 * k, -.04 * k, 0),
-        S(.025 * k, '#111', .1 * k, .06 * k, .1 * k), S(.025 * k, '#111', .1 * k, .06 * k, -.1 * k),
         part(G.cyl(0, .05 * k, .16 * k, 5), c, -.02, .14 * k, .1 * k).rotate(.5, 0, 0), part(G.cyl(0, .05 * k, .16 * k, 5), c, -.02, .14 * k, -.1 * k).rotate(-.5, 0, 0));
       if (big) for (const sd of [-1, 1]) {           // Geweih mit Verzweigungen
         const b0 = [-.02, .12, sd * .07], b1 = [-.08, .42, sd * .22], b2 = [-.18, .7, sd * .3];
@@ -445,23 +454,21 @@
         rod([-.5, .7, 0], [-.95, .42, 0], .07, c), S(.07, l, -.97, .4, 0));
       legs([[.33, .12], [.33, -.12], [-.33, .12], [-.33, -.12]], .48, .05, c, '#4a4d52');
       head.at(.55, .86, 0);
-      hs.add(S(.18, c, 0, 0, 0), part(G.cyl(0, .09, .28, 7), l, .25, -.04, 0).rotate(0, 0, -PI / 2), S(.035, '#111', .39, -.04, 0),
-        S(.025, '#f2c94c', .12, .07, .09), S(.025, '#f2c94c', .12, .07, -.09), part(G.cyl(0, .06, .16, 4), c, -.04, .2, .09), part(G.cyl(0, .06, .16, 4), c, -.04, .2, -.09));
+      hs.add(S(.18, c, 0, 0, 0), part(G.cyl(0, .09, .28, 7), l, .25, -.04, 0).rotate(0, 0, -PI / 2), S(.035, '#111', .39, -.04, 0), part(G.cyl(0, .06, .16, 4), c, -.04, .2, .09), part(G.cyl(0, .06, .16, 4), c, -.04, .2, -.09));
     } else if (kind === 'fox') {
       const c = '#d9692a', w = '#f6efe6';
       s.add(part(G.sphere(.28, 10, 7), c, 0, .55, 0).scale(1.6, .72, .62), part(G.sphere(.16, 8, 6), w, .22, .46, 0).scale(1.5, .7, .8),
         rod([-.42, .58, 0], [-.85, .42, 0], .1, c), part(G.cyl(0, .1, .22, 7), w, -.98, .38, 0).rotate(0, 0, PI / 2 + .35));
       legs([[.28, .1], [.28, -.1], [-.28, .1], [-.28, -.1]], .4, .04, '#2a1d17', null);
       head.at(.46, .72, 0);
-      hs.add(S(.15, c, 0, 0, 0), part(G.cyl(0, .08, .24, 7), w, .2, -.04, 0).rotate(0, 0, -PI / 2), S(.03, '#111', .33, -.04, 0),
-        S(.022, '#111', .1, .05, .075), S(.022, '#111', .1, .05, -.075), part(G.cyl(0, .06, .17, 4), c, -.03, .19, .08), part(G.cyl(0, .06, .17, 4), c, -.03, .19, -.08));
+      hs.add(S(.15, c, 0, 0, 0), part(G.cyl(0, .08, .24, 7), w, .2, -.04, 0).rotate(0, 0, -PI / 2), S(.03, '#111', .33, -.04, 0), part(G.cyl(0, .06, .17, 4), c, -.03, .19, .08), part(G.cyl(0, .06, .17, 4), c, -.03, .19, -.08));
     } else if (kind === 'hare') {
       const c = '#9b7b5b';
       s.add(part(G.sphere(.22, 9, 7), c, 0, .3, 0).scale(1.35, .95, .85), S(.08, '#f4f0ea', -.3, .32, 0));
       legs([[.15, .08], [.15, -.08]], .14, .03, c, null);
       a.push(part(G.sphere(.12, 7, 5), c, -.16, .12, .12).scale(1.6, .7, .7), part(G.sphere(.12, 7, 5), c, -.16, .12, -.12).scale(1.6, .7, .7));
       head.at(.26, .44, 0);
-      hs.add(S(.12, c, .04, 0, 0), S(.02, '#111', .13, .04, .07), S(.02, '#111', .13, .04, -.07), S(.02, '#e8a0a8', .16, -.02, 0),
+      hs.add(S(.12, c, .04, 0, 0), S(.02, '#e8a0a8', .16, -.02, 0),
         part(G.box(.06, .3, .045), c, -.04, .22, .05).rotate(.15, 0, .25), part(G.box(.06, .3, .045), c, -.04, .22, -.05).rotate(-.15, 0, .25));
     } else if (kind === 'squirrel') {
       const c = '#b0522a';
@@ -469,7 +476,7 @@
       [[-.16, .22], [-.24, .36], [-.22, .52], [-.12, .6]].forEach((p, i) => s.add(S(.085 - i * .004, c, p[0], p[1], 0)));
       legs([[.07, .06], [.07, -.06], [-.06, .06], [-.06, -.06]], .1, .025, '#7a3a1c', null);
       head.at(.15, .3, 0);
-      hs.add(S(.085, c, .03, 0, 0), S(.016, '#111', .09, .03, .05), S(.016, '#111', .09, .03, -.05), part(G.cyl(0, .03, .07, 4), c, 0, .09, .04), part(G.cyl(0, .03, .07, 4), c, 0, .09, -.04));
+      hs.add(S(.085, c, .03, 0, 0), part(G.cyl(0, .03, .07, 4), c, 0, .09, .04), part(G.cyl(0, .03, .07, 4), c, 0, .09, -.04));
     } else if (kind === 'boar' || kind === 'piglet') {
       const young = kind === 'piglet', k = young ? .45 : 1, c = young ? '#c9a77a' : '#4f4339';
       s.add(part(G.sphere(.42 * k, 10, 7), c, 0, .58 * k, 0).scale(1.5, .9, .8));
@@ -478,8 +485,7 @@
       s.add(rod([-.6 * k, .65 * k, 0], [-.72 * k, .45 * k, 0], .025 * k, c));
       legs([[.32 * k, .16 * k], [.32 * k, -.16 * k], [-.32 * k, .16 * k], [-.32 * k, -.16 * k]], .32 * k, .07 * k, '#2e2620', '#1b1714');
       head.at(.6 * k, .62 * k, 0);
-      hs.add(part(G.sphere(.24 * k, 9, 6), c, .05 * k, 0, 0).scale(1.2, 1, .9), part(G.cyl(.09 * k, .1 * k, .2 * k, 8), '#8a6e62', .32 * k, -.05 * k, 0).rotate(0, 0, -PI / 2),
-        S(.022 * k, '#111', .2 * k, .09 * k, .12 * k), S(.022 * k, '#111', .2 * k, .09 * k, -.12 * k), part(G.cyl(0, .06 * k, .14 * k, 4), c, 0, .22 * k, .12 * k).rotate(.4, 0, 0), part(G.cyl(0, .06 * k, .14 * k, 4), c, 0, .22 * k, -.12 * k).rotate(-.4, 0, 0));
+      hs.add(part(G.sphere(.24 * k, 9, 6), c, .05 * k, 0, 0).scale(1.2, 1, .9), part(G.cyl(.09 * k, .1 * k, .2 * k, 8), '#8a6e62', .32 * k, -.05 * k, 0).rotate(0, 0, -PI / 2), part(G.cyl(0, .06 * k, .14 * k, 4), c, 0, .22 * k, .12 * k).rotate(.4, 0, 0), part(G.cyl(0, .06 * k, .14 * k, 4), c, 0, .22 * k, -.12 * k).rotate(-.4, 0, 0));
       if (!young) hs.add(part(G.cyl(0, .025, .12, 5), '#f4efe2', .34, .04, .08).rotate(0, 0, -.3), part(G.cyl(0, .025, .12, 5), '#f4efe2', .34, .04, -.08).rotate(0, 0, -.3));
     } else if (kind === 'hedgehog') {
       const c = '#5a4430';
@@ -488,7 +494,7 @@
         if (n[0] > .75) continue; s.add(rod(b, [b[0] + n[0] * .17 - .05, b[1] + n[1] * .17, b[2] + n[2] * .17], .014, i % 3 ? '#3b2c1f' : '#d8c8b0')); }
       legs([[.12, .1], [.12, -.1], [-.12, .1], [-.12, -.1]], .08, .03, '#8a6a4a', null);
       head.at(.3, .14, 0);
-      hs.add(part(G.cyl(0, .1, .22, 7), '#c9a982', .06, 0, 0).rotate(0, 0, -PI / 2), S(.025, '#111', .17, 0, 0), S(.018, '#111', .06, .05, .05), S(.018, '#111', .06, .05, -.05));
+      hs.add(part(G.cyl(0, .1, .22, 7), '#c9a982', .06, 0, 0).rotate(0, 0, -PI / 2), S(.025, '#111', .17, 0, 0));
     } else if (kind === 'owl') {
       const c = '#8a6a4a';
       s.add(part(G.sphere(.22, 9, 7), c, 0, .28, 0).scale(.95, 1.2, .95), part(G.sphere(.14, 8, 6), '#e6d4b4', .12, .25, 0).scale(.6, 1.2, 1),
@@ -505,7 +511,6 @@
       legs([[.3 * k, .13 * k], [.3 * k, -.13 * k], [-.3 * k, .13 * k], [-.3 * k, -.13 * k]], .5 * k, .055 * k, d, '#2a2420');
       head.at(.55 * k, 1.05 * k, 0);
       hs.add(part(G.sphere(.15 * k, 8, 6), c, .05 * k, 0, 0).scale(1.3, .95, .9), part(G.sphere(.08 * k, 7, 5), shade(c, .75), .22 * k, -.05 * k, 0),
-        S(.025 * k, '#111', .12 * k, .05 * k, .09 * k), S(.025 * k, '#111', .12 * k, .05 * k, -.09 * k),
         part(G.cyl(0, .04 * k, .12 * k, 4), c, -.02 * k, .1 * k, .11 * k).rotate(.9, 0, 0), part(G.cyl(0, .04 * k, .12 * k, 4), c, -.02 * k, .1 * k, -.11 * k).rotate(-.9, 0, 0));
       if (kind === 'ibex') hs.add(part(G.cyl(.03, 0, .14, 5), d, .16, -.16, 0));               // Bart
       if (kind !== 'kid') { const R = kind === 'ibex' ? .34 : .17, arc = kind === 'ibex' ? 2.5 : 1.7, n = 9;   // gebogene Hörner mit Wülsten
@@ -522,7 +527,7 @@
       legs([[.28, .11], [.28, -.11], [-.28, .11], [-.28, -.11]], .6, .04, d, '#1a1512');
       head.at(.55, 1.16, 0);
       hs.add(part(G.sphere(.12, 8, 6), '#e9dfcc', .05, 0, 0).scale(1.4, .95, .85), part(G.box(.26, .05, .03), d, .08, .02, .07), part(G.box(.26, .05, .03), d, .08, .02, -.07),
-        S(.022, '#111', .1, .04, .085), S(.022, '#111', .1, .04, -.085), S(.025, '#111', .24, -.02, 0),
+        S(.025, '#111', .24, -.02, 0),
         part(G.cyl(0, .035, .1, 4), c, -.03, .09, .09).rotate(.8, 0, 0), part(G.cyl(0, .035, .1, 4), c, -.03, .09, -.09).rotate(-.8, 0, 0));
       for (const sd of [-1, 1]) hs.add(rod([0, .1, sd * .04], [-.01, .26, sd * .05], .018, '#111'), rod([-.01, .26, sd * .05], [-.07, .3, sd * .05], .014, '#111'));
     } else if (kind === 'cow' || kind === 'calf') {
@@ -536,7 +541,6 @@
       legs([[.42 * k, .2 * k], [.42 * k, -.2 * k], [-.45 * k, .2 * k], [-.45 * k, -.2 * k]], .66 * k, .075 * k, c, '#2a2420');
       head.at(.9 * k, 1.16 * k, 0);
       hs.add(part(G.box(.34 * k, .3 * k, .3 * k), c, .1 * k, 0, 0), part(G.box(.18 * k, .22 * k, .3 * k), l, .32 * k, -.06 * k, 0), S(.025 * k, '#2a1d17', .42 * k, -.06 * k, .07 * k), S(.025 * k, '#2a1d17', .42 * k, -.06 * k, -.07 * k),
-        S(.035 * k, '#111', .18 * k, .07 * k, .15 * k), S(.035 * k, '#111', .18 * k, .07 * k, -.15 * k),
         part(G.box(.08 * k, .06 * k, .22 * k), c, .02 * k, .08 * k, .24 * k).rotate(.3, 0, 0), part(G.box(.08 * k, .06 * k, .22 * k), c, .02 * k, .08 * k, -.24 * k).rotate(-.3, 0, 0), part(G.box(.08 * k, .02 * k, .2 * k), '#f0c8b8', .03 * k, .085 * k, .24 * k).rotate(.3, 0, 0), part(G.box(.08 * k, .02 * k, .2 * k), '#f0c8b8', .03 * k, .085 * k, -.24 * k).rotate(-.3, 0, 0));
       if (kind === 'cow') hs.add(rod([.02, .15, .12], [.06, .3, .26], .03, '#efe4cc'), rod([.06, .3, .26], [.12, .38, .22], .022, '#3a3530'), rod([.02, .15, -.12], [.06, .3, -.26], .03, '#efe4cc'), rod([.06, .3, -.26], [.12, .38, -.22], .022, '#3a3530'));
     } else if (kind === 'sheep') {
@@ -545,14 +549,14 @@
       [[.2, .86, .1], [-.05, .9, -.08], [-.25, .82, .1], [.08, .8, .2], [-.15, .78, -.2], [.25, .7, -.18], [-.3, .64, .18], [0, .6, -.24]].forEach(p => s.add(S(.16, w, ...p)));
       legs([[.22, .12], [.22, -.12], [-.22, .12], [-.22, -.12]], .42, .035, f, '#1b1b1b');
       head.at(.46, .8, 0);
-      hs.add(part(G.sphere(.13, 8, 6), f, .08, -.02, 0).scale(1.35, 1, .85), S(.11, w, -.03, .08, 0), S(.022, '#f2e2a0', .14, .03, .07), S(.022, '#f2e2a0', .14, .03, -.07),
+      hs.add(part(G.sphere(.13, 8, 6), f, .08, -.02, 0).scale(1.35, 1, .85), S(.11, w, -.03, .08, 0),
         part(G.box(.06, .04, .16), f, 0, .02, .14).rotate(.4, 0, 0), part(G.box(.06, .04, .16), f, 0, .02, -.14).rotate(-.4, 0, 0));
     } else if (kind === 'goat') {
       const c = '#efe8dc', d = '#7a5a3a';
       s.add(part(G.sphere(.28, 9, 7), c, 0, .7, 0).scale(1.5, .85, .78), part(G.cyl(.08, .11, .3, 7), c, .34, .86, 0).rotate(0, 0, -.6), rod([-.4, .78, 0], [-.48, .92, 0], .03, c));
       legs([[.25, .11], [.25, -.11], [-.25, .11], [-.25, -.11]], .48, .035, c, '#3a3530');
       head.at(.5, 1.0, 0);
-      hs.add(part(G.sphere(.12, 8, 6), c, .07, 0, 0).scale(1.45, .9, .8), S(.022, '#111', .11, .05, .08), S(.022, '#111', .11, .05, -.08), part(G.cyl(.03, 0, .14, 5), d, .17, -.15, 0),
+      hs.add(part(G.sphere(.12, 8, 6), c, .07, 0, 0).scale(1.45, .9, .8), part(G.cyl(.03, 0, .14, 5), d, .17, -.15, 0),
         part(G.box(.05, .03, .16), c, -.01, .02, .14).rotate(.6, 0, 0), part(G.box(.05, .03, .16), c, -.01, .02, -.14).rotate(-.6, 0, 0),
         rod([-.02, .08, .05], [-.12, .24, .07], .022, '#8a7a62'), rod([-.12, .24, .07], [-.2, .26, .07], .016, '#8a7a62'), rod([-.02, .08, -.05], [-.12, .24, -.07], .022, '#8a7a62'), rod([-.12, .24, -.07], [-.2, .26, -.07], .016, '#8a7a62'));
     } else if (kind === 'pig' || kind === 'pigletF') {
@@ -561,7 +565,7 @@
       legs([[.3 * k, .16 * k], [.3 * k, -.16 * k], [-.3 * k, .16 * k], [-.3 * k, -.16 * k]], .3 * k, .065 * k, c, '#b0707a');
       head.at(.58 * k, .6 * k, 0);
       hs.add(part(G.sphere(.23 * k, 9, 6), c, .05 * k, 0, 0).scale(1.1, 1, .95), part(G.cyl(.1 * k, .11 * k, .14 * k, 10), d, .28 * k, -.05 * k, 0).rotate(0, 0, -PI / 2),
-        S(.022 * k, '#7a3b4a', .35 * k, -.03 * k, .04 * k), S(.022 * k, '#7a3b4a', .35 * k, -.03 * k, -.04 * k), S(.022 * k, '#111', .18 * k, .08 * k, .1 * k), S(.022 * k, '#111', .18 * k, .08 * k, -.1 * k),
+        S(.022 * k, '#7a3b4a', .35 * k, -.03 * k, .04 * k), S(.022 * k, '#7a3b4a', .35 * k, -.03 * k, -.04 * k),
         part(G.cyl(0, .08 * k, .15 * k, 4), c, .06 * k, .2 * k, .12 * k).rotate(.5, 0, -.6), part(G.cyl(0, .08 * k, .15 * k, 4), c, .06 * k, .2 * k, -.12 * k).rotate(-.5, 0, -.6));
     } else if (kind === 'hen' || kind === 'rooster') {
       const roo = kind === 'rooster', c = roo ? '#b5541f' : (Math.random() < .5 ? '#f6f3ec' : '#a8643a'), comb = '#d62828';
@@ -570,7 +574,7 @@
       else s.add(part(G.box(.1, .16, .1), c, -.18, .4, 0).rotate(0, 0, .5));
       legs([[.02, .05], [.02, -.05]], .17, .012, '#e0a02a', null);
       head.at(.15, .45, 0);
-      hs.add(S(.075, c, 0, 0, 0), part(G.cyl(0, .025, .07, 4), '#e0a02a', .09, -.01, 0).rotate(0, 0, -PI / 2), S(.014, '#111', .04, .02, .05), S(.014, '#111', .04, .02, -.05),
+      hs.add(S(.075, c, 0, 0, 0), part(G.cyl(0, .025, .07, 4), '#e0a02a', .09, -.01, 0).rotate(0, 0, -PI / 2),
         part(G.box(.1, roo ? .09 : .05, .02), comb, -.005, .085, 0), part(G.box(.03, .06, .02), comb, .055, -.06, 0));
     } else if (kind === 'dog') {
       // Berner Sennenhund: schwarz, weisse Brust und Blesse, rostbraune Abzeichen
@@ -579,7 +583,7 @@
       a.push(leg(.3, .46, .13, .46, .055, r, w, 0), leg(.3, .46, -.13, .46, .055, r, w, PI), leg(-.3, .46, .13, .46, .055, b, w, PI), leg(-.3, .46, -.13, .46, .055, b, w, 0));
       head.at(.5, .84, 0);
       hs.add(S(.16, b, 0, 0, 0), part(G.cyl(.07, .09, .18, 8), w, .17, -.05, 0).rotate(0, 0, -PI / 2), S(.035, '#111', .27, -.03, 0), part(G.box(.08, .16, .03), w, .1, .07, 0),
-        S(.045, r, .09, -.06, .1), S(.045, r, .09, -.06, -.1), S(.02, r, .1, .08, .06), S(.02, r, .1, .08, -.06), S(.024, '#2b1a0e', .12, .04, .07), S(.024, '#2b1a0e', .12, .04, -.07),
+        S(.045, r, .09, -.06, .1), S(.045, r, .09, -.06, -.1), S(.02, r, .1, .08, .06), S(.02, r, .1, .08, -.06),
         part(G.box(.1, .18, .04), b, -.02, -.02, .16).rotate(.2, 0, 0), part(G.box(.1, .18, .04), b, -.02, -.02, -.16).rotate(-.2, 0, 0), part(G.cyl(.02, .02, .12, 5), '#e63946', .15, -.15, 0).rotate(0, 0, PI / 2));
     } else if (kind === 'cat') {
       const c = '#e08a3a', d = '#a85a1f';
@@ -587,7 +591,7 @@
       for (let i = 0; i < 3; i++) s.add(part(G.box(.03, .2, .22), d, -.1 + i * .1, .32, 0));
       legs([[.13, .06], [.13, -.06], [-.13, .06], [-.13, -.06]], .22, .025, c, null);
       head.at(.25, .4, 0);
-      hs.add(S(.1, c, 0, 0, 0), S(.045, '#f6efe6', .08, -.03, 0), S(.018, '#2a7a3a', .07, .03, .045), S(.018, '#2a7a3a', .07, .03, -.045), S(.012, '#e8a0a8', .1, -.01, 0),
+      hs.add(S(.1, c, 0, 0, 0), S(.045, '#f6efe6', .08, -.03, 0), S(.012, '#e8a0a8', .1, -.01, 0),
         part(G.cyl(0, .045, .09, 4), c, -.01, .1, .05), part(G.cyl(0, .045, .09, 4), c, -.01, .1, -.05));
     } else { // Dachs
       const c = '#6e6e70';
@@ -595,8 +599,34 @@
       legs([[.25, .18], [.25, -.18], [-.25, .18], [-.25, -.18]], .2, .055, '#222', null);
       head.at(.42, .34, 0);
       hs.add(part(G.cyl(.02, .15, .3, 8), '#f4f4f0', .12, 0, 0).rotate(0, 0, -PI / 2), part(G.box(.26, .05, .05), '#1b1b1b', .13, .06, .06).rotate(0, 0, -.12), part(G.box(.26, .05, .05), '#1b1b1b', .13, .06, -.06).rotate(0, 0, -.12),
-        S(.03, '#111', .28, 0, 0), S(.02, '#111', .12, .05, .06), S(.02, '#111', .12, .05, -.06), S(.04, '#f4f4f0', -.02, .1, .1), S(.04, '#f4f4f0', -.02, .1, -.1));
+        S(.03, '#111', .28, 0, 0), S(.04, '#f4f4f0', -.02, .1, .1), S(.04, '#f4f4f0', -.02, .1, -.1));
     }
+    // Gesicht: Augen, Maul-/Mundlinie, Nase bzw. Nüstern (artgerecht, auf der Oberfläche statt im Kopf versteckt)
+    { const K = { calf: .55, piglet: .45, pigletF: .5, kid: .55, ibexF: .85, stag: 1.3 }[kind] || 1, sc = a => a.map(v => v * K), D = '#2a1a14';
+      const m = (p, q, w) => hs.add(rod(sc(p), sc(q), (w || .01) * K, D));
+      const V = (tip, back, zw, w) => { m(tip, [back[0], back[1], zw], w); m(tip, [back[0], back[1], -zw], w); };   // Maullinie zu beiden Mundwinkeln
+      const E = (c, r, d, er, iris) => eyes(hs, sc(c), sc(r), d, er * K, iris), dot = (x, y, z, r, col) => hs.add(S(r * K, col || D, x * K, y * K, z * K));
+      switch (kind) {
+        case 'bear': E([.1, 0, 0], [.32, .32, .32], [.62, .42, .62], .04, '#3a2414'); m([.55, -.07, 0], [.545, -.13, 0], .012); V([.545, -.13, 0], [.42, -.175], .09, .012); break;
+        case 'deer': case 'stag': E([.06, 0, 0], [.2025, .15, .1425], [.35, .4, .85], .034); V([.25, -.07, 0], [.15, -.12], .07, .009); break;
+        case 'wolf': E([0, 0, 0], [.18, .18, .18], [.72, .4, .56], .028, '#e8b923'); V([.36, -.055, 0], [.18, -.1], .05, .011); break;
+        case 'fox': E([0, 0, 0], [.15, .15, .15], [.72, .42, .55], .024, '#e09a1a'); V([.3, -.05, 0], [.15, -.09], .045, .01); break;
+        case 'hare': E([.04, 0, 0], [.12, .12, .12], [.32, .38, .87], .026, '#5a3a1a'); m([.155, -.04, 0], [.15, -.06, 0], .007); V([.15, -.06, 0], [.13, -.07], .025, .007); break;
+        case 'squirrel': E([.03, 0, 0], [.085, .085, .085], [.4, .42, .82], .019); dot(.114, -.01, 0, .012); m([.113, -.022, 0], [.1, -.045, 0], .005); break;
+        case 'boar': case 'piglet': E([.05, 0, 0], [.288, .24, .216], [.45, .5, .74], .026, '#3a2414'); dot(.42, -.04, .035, .024); dot(.42, -.04, -.035, .024); V([.4, -.15, 0], [.2, -.17], .1, .014); break;
+        case 'hedgehog': E([.06, 0, 0], [.11, .05, .05], [.2, .6, .75], .02); V([.15, -.016, 0], [.08, -.045], .022, .006); break;
+        case 'ibex': case 'ibexF': case 'kid': E([.05, 0, 0], [.195, .1425, .135], [.3, .45, .84], .026, '#b8862a'); dot(.295, -.035, .025, .013); dot(.295, -.035, -.025, .013); V([.29, -.085, 0], [.2, -.115], .05, .009); break;
+        case 'chamois': E([.05, 0, 0], [.168, .114, .102], [.3, .45, .84], .022, '#5a3a1a'); V([.235, -.055, 0], [.15, -.075], .045, .008); break;
+        case 'cow': case 'calf': eyes(hs, sc([.18, .07, 0]), [1, 1, .155 * K], [0, 0, 1], .036 * K, '#3a2414'); m([.413, -.13, -.1], [.413, -.13, .1], .012); m([.413, -.13, .1], [.34, -.14, .152], .012); m([.413, -.13, -.1], [.34, -.14, -.152], .012); break;
+        case 'sheep': E([.08, -.02, 0], [.1755, .13, .1105], [.32, .42, .85], .022, '#c9a227'); dot(.25, -.03, .022, .012); dot(.25, -.03, -.022, .012); m([.255, -.045, 0], [.25, -.07, 0], .007); V([.25, -.07, 0], [.2, -.1], .04, .007); break;
+        case 'goat': E([.07, 0, 0], [.174, .108, .096], [.3, .45, .84], .021, '#c9a227'); dot(.24, -.015, .02, .011); dot(.24, -.015, -.02, .011); m([.243, -.035, 0], [.24, -.055, 0], .007); V([.24, -.055, 0], [.17, -.075], .035, .007); break;
+        case 'pig': case 'pigletF': E([.05, 0, 0], [.253, .23, .2185], [.5, .45, .74], .024, '#3a2414'); V([.3, -.16, 0], [.15, -.185], .1, .013); break;
+        case 'hen': case 'rooster': E([0, 0, 0], [.075, .075, .075], [.35, .35, .87], .016, '#e0a020'); break;
+        case 'dog': E([0, 0, 0], [.16, .16, .16], [.64, .45, .62], .026, '#5a3a1a'); m([.27, -.06, 0], [.265, -.105, 0], .009); V([.265, -.105, 0], [.12, -.13], .065, .01); break;
+        case 'cat': E([0, 0, 0], [.1, .1, .1], [.66, .42, .62], .021, '#5aa83a'); dot(.125, -.008, 0, .014, '#e8a0a8'); m([.124, -.025, 0], [.12, -.045, 0], .005); V([.12, -.045, 0], [.105, -.06], .022, .005); break;
+        case 'owl': break;
+        default: E([.12, 0, 0], [.2, .088, .088], [0, .45, .89], .018); V([.27, -.03, 0], [.16, -.065], .03, .007);   // Dachs
+      } }
     head.add(merge(hs)); head.phase = Math.random() * 10;
     body.add(merge(s), head, ...a);
     const sz = { bear: 1.1, stag: .9, deer: .75, wolf: .8, badger: .55, fox: .6, hare: .35, squirrel: .2, boar: .9, piglet: .4, hedgehog: .35, owl: .25, ibex: .7, ibexF: .6, kid: .4, chamois: .6, cow: 1.1, calf: .6, sheep: .55, goat: .55, pig: .7, pigletF: .35, hen: .2, rooster: .22, dog: .6, cat: .3 }[kind] || .8;
@@ -611,6 +641,7 @@
     s.add(part(G.sphere(.18 * k, 8, 6), c, 0, 0, 0).scale(1.9, .8, .8), S(.12 * k, c, .3 * k, .05 * k, 0), part(G.cyl(0, .04 * k, .12 * k, 4), '#e0a02a', .44 * k, .04 * k, 0).rotate(0, 0, -PI / 2),
       part(G.box(.26 * k, .03 * k, .22 * k), c, -.38 * k, 0, 0));
     if (big) s.add(part(G.sphere(.1, 6, 4), '#e8dcc6', .05, -.08, 0).scale(2.2, .6, 1.2));
+    eyes(s, [.3 * k, .05 * k, 0], [.12 * k, .12 * k, .12 * k], [.35, .3, .88], .024 * k, big ? '#e0a020' : null);
     root.add(merge(s));
     const wings = [];
     for (const sd of [-1, 1]) { const w = new Node(null, null, { name: 'wing' }).at(0, .03 * k, sd * .08 * k); w.side = sd;
@@ -632,6 +663,7 @@
       s.add(part(G.sphere(.25, 10, 7), c, 0, 0, 0).scale(1.8, .7, .45), part(G.sphere(.12, 7, 5), shade(c, 1.15), .24, .02, 0).scale(1.2, .9, .9),
         S(.03, '#111', .38, .05, .075), S(.03, '#111', .38, .05, -.075), part(G.prism([[0, 0], [.2, .08], [.05, .22]], .02, 'fin'), shade(c, .8), -.06, .1, 0),
         part(G.box(.14, .02, .12), shade(c, .8), .05, -.12, .06).rotate(.4, 0, 0), part(G.box(.14, .02, .12), shade(c, .8), .05, -.12, -.06).rotate(-.4, 0, 0));
+      s.add(part(G.sphere(.032, 6, 4), '#3a0f08', .382, -.035, 0).scale(.6, .6, 1.4));   // Fischmaul
       if (variant === '#f4f1ea') for (let i = 0; i < 4; i++) s.add(S(.07, '#e63946', -.15 + i * .12, .07 - (i % 2) * .05, .05 * (i % 2 ? 1 : -1)).scale(1.4, 1, .6)); // Koi-Flecken
       const tail = new Node(null, null, { name: 'tail' }).at(-.42, 0, 0);
       tail.add(merge(new Node().add(part(G.prism([[0, 0], [-.3, .22], [-.22, 0], [-.3, -.22]], .03, 'tailfin'), shade(c, .85), 0, 0, 0))));
@@ -640,7 +672,8 @@
       const body = baby ? '#f2d14a' : male ? '#cfc8ba' : '#8a6a4a', head = baby ? '#f2d14a' : male ? '#1f6b3a' : '#7a5a3a';
       s.add(part(G.sphere(.32 * k, 10, 7), body, 0, .14 * k, 0).scale(1.45, .78, .95), part(G.cyl(0, .1 * k, .24 * k, 6), shade(body, .75), -.44 * k, .24 * k, 0).rotate(0, 0, PI / 2 + .55),
         part(G.cyl(.08 * k, .1 * k, .2 * k, 7), head, .3 * k, .32 * k, 0).rotate(0, 0, -.3), part(G.sphere(.15 * k, 8, 6), head, .36 * k, .45 * k, 0),
-        part(G.box(.15 * k, .04 * k, .1 * k), '#f29e1c', .53 * k, .42 * k, 0), S(.025 * k, '#111', .43 * k, .5 * k, .09 * k), S(.025 * k, '#111', .43 * k, .5 * k, -.09 * k));
+        part(G.box(.15 * k, .04 * k, .1 * k), '#f29e1c', .53 * k, .42 * k, 0));
+      eyes(s, [.36 * k, .45 * k, 0], [.15 * k, .15 * k, .15 * k], [.35, .4, .85], .026 * k);
       if (male) s.add(part(G.cyl(.105, .11, .03, 10), '#ffffff', .31, .34, 0).rotate(0, 0, -.3), part(G.sphere(.24, 8, 5), '#6b4a3a', .18, .2, 0).scale(.8, .8, .9));
       if (!baby) s.add(part(G.sphere(.2, 8, 5), shade(body, .82), -.04, .22, .2).scale(1.4, .55, .5), part(G.sphere(.2, 8, 5), shade(body, .82), -.04, .22, -.2).scale(1.4, .55, .5),
         B(.08, .03, .1, '#3a5fcd', -.14, .24, .27), B(.08, .03, .1, '#3a5fcd', -.14, .24, -.27));
@@ -686,7 +719,7 @@
     const L = { ...DEFAULT, ...(look || {}) };
     if (L.goldPaint) L.color = GOLD;
     if (L.pattern === 'gold') { L.suit = '#d9a514'; L.suit2 = '#fff3c4'; }
-    const m = (V[L.vehicle] || V.rocket)(L);
+    const m = (V[L.vehicle] || V.rocket)(L), E = !!L.empty;   // empty: Fahrer ist ausgestiegen (Siegerpodest)
     const root = new Node(), bob = new Node(null, null, { name: 'bob' });
     const se = m.seat; let dr;
     const tilt = .55;
@@ -695,7 +728,7 @@
       const sw = new Node().at(c[0], c[1], 0).rotate(0, 0, tilt), inner = new Node().rotate(0, PI / 2, 0);
       inner.add(part(G.torus(.16, .028, 18, 6), '#1e2024', 0, 0, 0), part(G.box(.3, .035, .03), '#555a60', 0, 0, 0), part(G.cyl(.05, .05, .05, 10), L.color, 0, 0, 0).rotate(PI / 2, 0, 0));
       sw.add(inner);
-      for (const sd of [-1, 1]) sw.add(fist(L.skin).at(0, .02, sd * .16));
+      if (!E) for (const sd of [-1, 1]) sw.add(fist(L.skin).at(0, .02, sd * .16));
       m.s.add(sw, rod(c, [c[0] + .3, c[1] - .32, 0], .03, '#2b2d31'));
       // Griffpunkt (Handfläche) in Fahrzeugkoordinaten
       const px = -.055 * Math.cos(tilt) - .02 * Math.sin(tilt), py = -.055 * Math.sin(tilt) + .02 * Math.cos(tilt);
@@ -704,15 +737,15 @@
       const g = [.36, .3, .12]; dr = driver(L, g, true);
       for (const sd of [-1, 1]) {
         const hp = [se[0] + g[0] + .04, se[1] + g[1], sd * g[2]], bit = [m.reins[0], m.reins[1], sd * .09];
-        m.s.add(rod(hp, bit, .014, '#5a3b1e'), fist(L.skin).at(hp[0], hp[1], hp[2]).rotate(0, 0, -PI / 2 + Math.atan2(bit[1] - hp[1], bit[0] - hp[0])));
+        if (!E) m.s.add(rod(hp, bit, .014, '#5a3b1e'), fist(L.skin).at(hp[0], hp[1], hp[2]).rotate(0, 0, -PI / 2 + Math.atan2(bit[1] - hp[1], bit[0] - hp[0])));
       }
       m.s.add(rod([m.reins[0], m.reins[1], -.1], [m.reins[0], m.reins[1], .1], .02, '#c0c7cf'));
     } else dr = driver(L);
-    dr.body.pos = se.slice(); m.s.add(dr.body);
+    dr.body.pos = se.slice(); if (!E) m.s.add(dr.body);
     const headPivot = new Node(null, null, { name: 'head' }).at(se[0], se[1] + .5, se[2]);
     headPivot.add(merge(new Node().add(dr.head)));
     headPivot.phase = Math.random() * 10;
-    m.a.push(headPivot);
+    if (!E) m.a.push(headPivot);
     if (L.flag) {                           // Siegerwimpel mit eigenen Initialen, flattert im Fahrtwind
       const bx = se[0] - .42, by = se[1] + .05, top = by + 1.45;
       m.s.add(rod([bx, by, -.16], [bx, top, -.16], .022, '#d9dde2'), S(.045, '#ffc61a', bx, top + .03, -.16));

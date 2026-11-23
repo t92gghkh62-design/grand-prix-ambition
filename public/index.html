@@ -404,11 +404,12 @@ function pace() {
 function compute() {
   const p = pace(), wk = weekStart(Date.now()), by = {};
   S.people.forEach(pe => by[pe.id] = { ...pe, look: { ...Mo.DEFAULT, initials: mkIni(pe.name), ...pe.look }, count: 0, week: 0 });
-  for (const e of S.entries) { const x = by[e.personId]; if (!x) continue; x.count += e.delta; if (new Date(e.ts).getTime() >= wk) x.week += e.delta; }
+  // reachedAt: Zeitpunkt, an dem der aktuelle Stand erreicht wurde (bei Gleichstand zählt, wer zuerst dort war)
+  for (const e of [...S.entries].sort((a, b) => String(a.ts).localeCompare(String(b.ts)))) { const x = by[e.personId]; if (!x) continue; x.count += e.delta; const ts = new Date(e.ts).getTime(); if (e.delta) x.reachedAt = ts; if (ts >= wk) x.week += e.delta; }
   const list = Object.values(by);
   for (const x of list) { x.pct = x.count / x.goal; x.cps = CPS.filter(c => x.pct >= c).length;
     const nc = CPS.find(c => x.pct < c) || (x.pct < 1 ? 1 : null); x.next = nc; x.toNext = nc ? Math.ceil(nc * x.goal - x.count - 1e-9) : 0; }
-  const ranked = [...list].sort((a, b) => b.pct - a.pct || b.count - a.count || a.name.localeCompare(b.name));
+  const ranked = [...list].sort((a, b) => (Math.abs(b.pct - a.pct) > 1e-9 ? b.pct - a.pct : 0) || (b.pct > 0 ? (a.reachedAt || 0) - (b.reachedAt || 0) : 0) || b.count - a.count || a.name.localeCompare(b.name));
   ranked.forEach((x, i) => x.rank = i + 1);
   return { list, ranked, p };
 }
