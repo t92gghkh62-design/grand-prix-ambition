@@ -5,7 +5,10 @@
   const PI = Math.PI;
   const START_T = .03, FINISH_T = .93;          // Fortschritt 0..100 % → Pfadparameter
   const TW = 2.2, LANE_HALF = 5.9;               // Strecke je Seite um TW verbreitert: 16+ Fahrzeuge fahren nebeneinander
-  const PARK_T = FINISH_T + .016, POD_T = .972, PODS = 10.8;   // Parkplatz nach dem Ziel, Siegerpodest (Pfadparameter, Abstand zur Pfadmitte)
+  const PARK_T = FINISH_T + .016, PODS = 6.8;   // Parkplatz nach dem Ziel; Siegerpodest am Wegende (Abstand hinter dem Wegende)
+  // Siegerpodest steht quer am Ende des Zielwegs, Blick zur Strecke: u = quer (für Zuschauer auf der Strecke +u = rechts), v = weg von der Strecke
+  const podFrame = P => { const q = P.at(1), V = q.tan, R = Math.sign(-V[2] * q.side[0] + V[0] * q.side[2]) || 1, U = [q.side[0] * R, q.side[2] * R];
+    return { q, R, V, toTrack: [-V[0], -V[2]], W: (u, v) => [q.p[0] + U[0] * u + V[0] * v, q.p[2] + U[1] * u + V[2] * v] }; };
   const tFor = pct => START_T + Math.max(0, Math.min(1.06, pct)) * (FINISH_T - START_T);
 
   function rng(seed) { let s = seed; return () => (s = (s * 16807) % 2147483647) / 2147483647; }
@@ -71,7 +74,8 @@
       this.canvas = canvas; this.layer = labelLayer; this.opts = opts;
       this.r = new Renderer(canvas);
       Object.assign(this.r.env, { sun: [0.42, 0.82, 0.38].map(v => v / Math.hypot(.42, .82, .38)), sky: [0.75, 0.86, 1.0], ground: [0.28, 0.34, 0.22], fog: [0.80, 0.89, 0.90], fogN: 55, fogF: 170 });
-      this.path = new Path([[0, 0, 40], [-8, 0, 30], [5, 0, 20], [12, 0, 9], [3, 0, 0], [-9, 0, -7], [-12, 0, -17], [-2, 0, -26], [9, 0, -33], [13, 0, -42]]);
+      // Waldweg als weich geschwungene Doppel-S-Kurve (Kurvenradius überall ≥ 12 m, damit die breite Strecke elegant bleibt)
+      this.path = new Path(Array.from({ length: 31 }, (_, i) => { const z = 44 - i * 3; return [-9 * Math.sin(.095 * (44 - z) + .3) + 9 * Math.sin(.3), 0, z]; }));
       // Kurvenradius je Pfadstelle (mit Vorlauf): auf der Kurveninnenseite werden Spuren, Wegrand und Wanderer gestaucht,
       // damit die verbreiterte Strecke in engen Kurven nicht über den Kurvenmittelpunkt hinausragt
       { const P = this.path, T = P.total, N = 600, Rr = new Float32Array(N + 1), Sg = new Int8Array(N + 1);
@@ -120,6 +124,7 @@
           members.push({ x, z, yaw: Math.atan2(sd * q.side[2], -sd * q.side[0]) + (rnd[i] - .5) * .4 }); this.addObs(x, z, .5); });
         this.crowdSpots.push({ x: cx, z: cz, t, sd, members });
       });
+      { const [x, z] = podFrame(P).W(0, PODS - 1.6); this.podPlan = { x, z }; }   // Siegerpodest-Platz (vor Arena und Bäumen reserviert)
       this.arena = null; if (this.planArena) this.planArena(P);
       // Teich: freie, gut sichtbare Stelle neben dem Pfad
       this.pond = null; { let best = null;
@@ -138,7 +143,6 @@
       const PD = this.pond;
       if (PD) this.addObs(PD.x, PD.z, PD.r + .3);
       const MS = this.massif;
-      { const q = P.at(POD_T); this.podPlan = { x: q.p[0] + q.side[0] * (PODS - 1.3), z: q.p[2] + q.side[2] * (PODS - 1.3) }; }
       const POD = this.podPlan, reserved = (x, z, r) => Math.hypot(POD.x - x, POD.z - z) < 5.4 + r || this.crowdSpots.some(c => Math.hypot(c.x - x, c.z - z) < r + 4.2) || (PD && Math.hypot(PD.x - x, PD.z - z) < PD.r + 3.2 + r) || (MS && Math.hypot(MS.x - x, MS.z - z) < MS.R + 1.5 + r) || (this.farm && this.farmReserved(x, z, r)) || (this.arena && this.arenaReserved(x, z, r)) || (this.sceneReserved && this.sceneReserved(x, z, r));
       const baseH = (x, z) => { const d = P.dist(x, z), k = Math.min(1, Math.max(0, (d - 7 - TW) / 12));
         return k * (Math.sin(x * .08) * 2.2 + Math.cos(z * .07 + 1) * 1.8 + Math.sin((x + z) * .15) * .7 + 1.2); };
@@ -317,8 +321,9 @@
         for (const d of [r + 1.2, r - .8, r - 2.8]) for (const sd of [-1, 1]) { const x = cx + ux * d - uz * sd * .7, z = cz + uz * d + ux * sd * .7; deco.add(new Node(G.cyl(.07, .07, 1.4, 6), '#6b4a2b').at(x, PD.y - .1, z)); }
         PD.jetty = [cx + ux * (r - 2.9), cz + uz * (r - 2.9)];
         { const d = r + 3.2, x = cx + ux * d + uz * 1.6, z = cz + uz * d - ux * 1.6, y = height(x, z), b = new Node().at(x, y, z); b.rot = [0, yaw + PI / 2, 0];
+          if (P.dist(x, z) > 4.4 + TW + 1.4) {   // Bank am Teich nur, wenn sie nicht an die Strecke ragt
           b.add(new Node(G.box(1.6, .08, .45), '#9a7448').at(0, .45, 0), new Node(G.box(1.6, .4, .06), '#9a7448').at(0, .75, -.2), new Node(G.box(.08, .45, .4), '#5a4030').at(-.7, .22, 0), new Node(G.box(.08, .45, .4), '#5a4030').at(.7, .22, 0));
-          deco.add(b); this.addObs(x, z, .9); }
+          deco.add(b); this.addObs(x, z, .9); } }
       }
       // Laternen entlang des Pfads (leuchten in der Dämmerung und nachts)
       this.lamps = new Node();
@@ -347,12 +352,9 @@
         return g; };
       deco.add(gate(START_T - .012, false), gate(FINISH_T, true));
       // Siegerpodest hinter dem Ziel: klassisch 2 – 1 – 3 mit grossen Zahlen, Rückwand und rotem Teppich
-      { const q = this.path.at(POD_T), sd = q.side, tn = q.tan, th = Math.atan2(-tn[2], tn[0]);
-        // lokales System des Podests: u = entlang der Strecke (für Zuschauer auf der Strecke: +u = rechts), v = weg von der Strecke
-        const R = Math.sign(tn[0] * -sd[2] + tn[2] * sd[0]) || 1;
-        const W = (u, v) => [q.p[0] + tn[0] * u * R + sd[0] * v, q.p[2] + tn[2] * u * R + sd[2] * v];
-        const gy = this.height(...W(0, PODS)), face = Math.atan2(sd[2], -sd[0]);   // Blickrichtung zur Strecke
-        const pod = new Node(); this.podium = { q, R, W, gy, face, slots: [] };
+      { const PF = podFrame(this.path), { q, R, W } = PF;
+        const gy = this.height(...W(0, PODS)), face = Math.atan2(-PF.toTrack[1], PF.toTrack[0]);   // Blickrichtung zur Strecke
+        const pod = new Node(); this.podium = { ...PF, gy, face, slots: [] };
         const blk = (u, h, w, top, n) => { const [x, z] = W(u, PODS), b = new Node().at(x, gy, z); b.rot = [0, face, 0];
           b.add(new Node(G.box(1.5, h + .4, w), '#f4f4f1').at(0, h / 2 - .2, 0), new Node(G.box(1.56, .07, w + .06), top).at(0, h + .03, 0),
             new Node(G.box(.06, h - .12, w * .92), top).at(.75, h / 2, 0));
@@ -369,7 +371,7 @@
           for (const s of [-1, 1]) { const st = new Node().at(0, 2.1, s * 2.1); st.add(new Node(G.cyl(.18, .18, .04, 5), '#ffd23f', { emis: .3 }).rotate(0, 0, PI / 2)); b.add(st); }
           pod.add(b); for (const s of [-2.6, -1, 1, 2.6]) { const [ox, oz] = W(s, PODS + 1.15); this.addObs(ox, oz, .4); } }
         // roter Teppich von der Strecke zum Podest
-        { const v0 = 6.4 + TW - 2.0, v1 = PODS - .8, [x, z] = W(0, (v0 + v1) / 2), c = new Node(G.box(v1 - v0, .03, 1.4), '#b3121b').at(x, this.height(x, z) + .03, z); c.rot = [0, face, 0]; pod.add(c); }
+        { const v0 = -1.5, v1 = PODS - .8, [x, z] = W(0, (v0 + v1) / 2), c = new Node(G.box(v1 - v0, .03, 1.4), '#b3121b').at(x, this.height(x, z) + .03, z); c.rot = [0, face, 0]; pod.add(c); }
         deco.add(pod); }
       // Zwischenziel-Tore bei 25 / 50 / 75 % (Bronze, Silber, Gold)
       this.signs = [];
@@ -386,6 +388,7 @@
         for (let i = 0; i < 9; i++) g.add(new Node(G.box(.5, .42, .03), ['#e63946', '#ffd23f', '#3a86ff', '#06d6a0'][i % 4]).at(-Wd + .6 + i * (Wd * 2 - 1.2) / 8, 3.15, 0).rotate(0, 0, PI / 4).scale(.7, .7, 1));
         deco.add(g); this.signs.push({ pos: [q.p[0], 6.6, q.p[2]], text: '🚩 ' + txt, cls: 'cp' });
       });
+      this.litGroups = []; this.litPanes = [];   // Fenster, die abends Licht bekommen (Bauernhaus, Mühle)
       if (this.buildFarm) this.buildFarm(deco, height);
       if (this.buildArena) this.buildArena(deco, height);
       this.sceneDyn = []; this.sceneActors = []; if (this.buildScenes) this.buildScenes(deco, height);
@@ -652,6 +655,9 @@
       const lampOn = 1 - smooth(-2, 6, e);
       if (this.lamps) for (let i = 0; i < this.lamps.children.length; i += 2) { const b = this.lamps.children[i], g = this.lamps.children[i + 1];
         b.color = mix([.55, .5, .42], [1, .9, .55], lampOn); b.emis = .2 + .8 * lampOn; g.alpha = .38 * lampOn; g.scl = [1 + lampOn * .9, 1 + lampOn * .9, 1 + lampOn * .9]; }
+      // Fensterlicht: in der Dämmerung gehen nach und nach Lichter an, spätabends wieder aus; frühmorgens brennt im Bauernhaus schon Licht
+      if (this.litPanes) { const lp = fmtParts(now), hr = +lp.hour + +lp.minute / 60;
+        for (const w of this.litPanes) { const on = lampOn > w.k && (hr >= 12 ? hr < w.off : (w.early && hr >= w.early)); w.visible = on; } }
       if (this.motes) this.motes.visible = dayF < .6 || this.season === 'summer';
       // Uhr
       if (!this.sunT || this.sunT.key !== fmtParts(now).year + '-' + +fmtParts(now).month + '-' + +fmtParts(now).day) this.sunT = sunTimes(now);
@@ -835,10 +841,12 @@
       const P = this.podium; if (!P) return;
       if (!P.ready) { P.ready = true;    // Ehrenreihen für Plätze 4+ vor dem Podest: nur freie Plätze (Absperrungen, Laternen, Fans meiden)
         const seen = new Set(), obs = []; for (const l of this.obs.values()) for (const o of l) if (!seen.has(o)) { seen.add(o); obs.push(o); }
-        for (let row = 0; row < 4; row++) for (let col = 0; col < 11; col++) { const u = -4 + col * .8, v = PODS - 1.55 - row * .8, [x, z] = P.W(u, v);
-          if (this.path.dist(x, z) < 4.4 + TW + .5 || obs.some(o => Math.hypot(o[0] - x, o[1] - z) < o[2] + .45) || (this.crowd || []).some(c => Math.hypot(c.x - x, c.z - z) < .8)) continue;
+        for (let row = 0; row < 6; row++) for (let col = 0; col < 14; col++) { const u = -5.2 + col * .8, v = PODS - .2 - row * .8, [x, z] = P.W(u, v);
+          if (obs.some(o => Math.hypot(o[0] - x, o[1] - z) < o[2] + .45) || (this.crowd || []).some(c => Math.hypot(c.x - x, c.z - z) < .8)) continue;
           P.slots.push({ u, v, y: this.height(x, z) }); }
-        P.slots = [...P.slots.slice(0, 3), ...P.slots.slice(3).sort((a, b) => b.v - a.v || Math.abs(a.u) - Math.abs(b.u) || a.u - b.u)]; }
+        // zuerst seitlich neben dem Podest, dann in Reihen davor (aussen beginnend, damit die Zahlen 1–3 sichtbar bleiben)
+        const pri = s => (Math.abs(s.u) > 2.4 && s.v > PODS - 1.9 ? 0 : 100) + (PODS - s.v) * 10 + (Math.abs(s.u) > 2.4 ? 0 : 50) + Math.abs(s.u);
+        P.slots = [...P.slots.slice(0, 3), ...P.slots.slice(3).sort((a, b) => pri(a) - pri(b) || a.u - b.u)]; }
       const figs = [...this.racers.values()].filter(r => r.fig).sort((a, b) => a.rank - b.rank);
       figs.forEach((r, k) => {
         const s = P.slots[Math.min(k, P.slots.length - 1)], [sx, sz] = P.W(s.u, s.v), f = r.fig;
@@ -952,7 +960,7 @@
       return cap >= lim ? s : s * Math.max(.12, cap / lim); }
     chase(r, base) {
       if (r.fig && this.podium) { const P = this.podium, q = P.q, f = r.fig.pos, dist = (base || 9) * this.uo.dist, pitch = .3 + this.uo.pitch;
-        return { yaw: Math.atan2(-q.side[0], -q.side[2]) + .25 * P.R + this.uo.yaw, pitch, dist, target: [f[0], f[1] + 1, f[2]] }; }
+        return { yaw: Math.atan2(P.toTrack[0], P.toTrack[1]) + .25 * P.R + this.uo.yaw, pitch, dist, target: [f[0], f[1] + 1, f[2]] }; }
       const T = this.path.total, tt = r.cur + r.stagger, back = this.path.at(tt - 9 / T), ahead = this.path.at(tt + 7 / T);
       let tx = ahead.p[0] - back.p[0], tz = ahead.p[2] - back.p[2]; const l = Math.hypot(tx, tz) || 1; tx /= l; tz /= l;
       const yaw0 = Math.atan2(-tx, -tz), dist = (base || 11) * this.uo.dist * Math.max(.62, (this.carScale || 1.3) / 1.3), pitch = .34 + this.uo.pitch;
@@ -985,7 +993,7 @@
           return { yaw: T.yaw0 + sway + this.uo.yaw, pitch: .3 + this.uo.pitch, dist: (T.animal.kind === 'bear' || T.animal.kind === 'stag' ? 8.5 : 6) * this.uo.dist, target: [p[0], p[1] + 1.1, p[2]] }; } break;
         case 'podium': if (this.podium) { const P = this.podium, q = P.q, [x, z] = P.W(0, PODS - .6), n = [...this.racers.values()].filter(r => r.fig).length;
           this.caption(n ? '🎬 Siegerpodest – ' + n + ' im Ziel' : '🎬 Das Siegerpodest wartet');
-          return { yaw: Math.atan2(-q.side[0], -q.side[2]) + sway * .5 + this.uo.yaw, pitch: .22 + this.uo.pitch, dist: 12 * this.uo.dist, target: [x, P.gy + 1.4, z] }; } break;
+          return { yaw: Math.atan2(P.toTrack[0], P.toTrack[1]) + sway * .5 + this.uo.yaw, pitch: .22 + this.uo.pitch, dist: 12 * this.uo.dist, target: [x, P.gy + 1.4, z] }; } break;
         case 'finish': { const q = this.path.at(FINISH_T); this.caption('🎬 Das Zieltor');
           return { yaw: Math.atan2(-q.tan[0], -q.tan[2]) + .7 + sway + this.uo.yaw, pitch: .2 + this.uo.pitch, dist: 17 * this.uo.dist, target: [q.p[0], 3, q.p[2]] }; }
         case 'rocks': if (this.massif && this.rockLife.length) { const M = this.massif, a = this.rockLife.find(r => r.kind === 'ibex') || this.rockLife[0];
@@ -1065,7 +1073,7 @@
       const far2 = 42 * 42, L = n => { const dx = n.pos[0] - eye[0], dy = n.pos[1] - eye[1], dz = n.pos[2] - eye[2]; if (dx * dx + dy * dy + dz * dz < far2) return n;
         const l = n.lod || (n.lod = lodOf(n)), b = n.anim && n.anim.bob ? n.anim.bob.pos[1] * n.scl[1] : 0; l.pos = [n.pos[0], n.pos[1] + b, n.pos[2]]; l.rot = n.rot; l.scl = n.scl; return l; };   // Hüpfen bleibt sichtbar
       const clouds = eye[1] > 24 ? [] : this.clouds;   // von oben (Übersicht) verdecken Wolken sonst die Strecke
-      this.r.render([...this.static, ...clouds, this.lamps, ...this.pondLife, this.pondFx, this.water, this.fall, ...this.animals.map(a => L(a.node)), ...this.farmLife.map(f => L(f.node)), ...(this.sceneDyn || []), ...(this.sceneActors || []).map(a => L(a.node)), ...(this.confetti ? [this.confetti] : []), ...this.rockLife.map(a => L(a.n)), ...this.crowd.map(c => L(c.node)), ...this.hikers.map(h => L(h.node)), ...this.flyers.map(f => f.node), ...[...this.racers.values()].map(r => r.node), ...[...this.racers.values()].filter(r => r.fig).map(r => L(r.fig)), this.dust, this.motes], { pos: eye, target: c.target, fov: c.fov, near: .5, far: 400 });
+      this.r.render([...this.static, ...clouds, this.lamps, ...this.pondLife, this.pondFx, this.water, this.fall, ...this.animals.map(a => L(a.node)), ...this.farmLife.map(f => L(f.node)), ...(this.sceneDyn || []), ...(this.litGroups || []), ...(this.sceneActors || []).map(a => L(a.node)), ...(this.confetti ? [this.confetti] : []), ...this.rockLife.map(a => L(a.n)), ...this.crowd.map(c => L(c.node)), ...this.hikers.map(h => L(h.node)), ...this.flyers.map(f => f.node), ...[...this.racers.values()].map(r => r.node), ...[...this.racers.values()].filter(r => r.fig).map(r => L(r.fig)), this.dust, this.motes], { pos: eye, target: c.target, fov: c.fov, near: .5, far: 400 });
       // Beschriftungen
       const W = this.canvas.clientWidth, H = this.canvas.clientHeight;
       for (const r of this.racers.values()) { const rp = this.rp(r), s = this.r.project([rp[0], rp[1] + (r.fig ? 2.15 : 2.3 * (this.carScale || 1) + .35 + (r.li % 3) * .5), rp[2]]); const el = r.label;

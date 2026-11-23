@@ -10,6 +10,9 @@
   const cyl = (rt, rb, h, seg, c, x, y, z) => N(G.cyl(rt, rb, h, seg), c, x, y, z);
   const sph = (r, c, x, y, z) => N(G.sphere(r, 7, 5), c, x, y, z);
   const sub = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+  // Leuchtende Fensterscheibe (unsichtbar am Tag); k = Dämmerungsschwelle, off = Lichterlöschen (Uhrzeit), early = morgens schon an
+  const litPane = (self, g, geo, x, y, z, R) => { const p = new Node(geo, ['#ffd27a', '#ffc861', '#ffe0a0'][Math.floor(R() * 3)], { emis: 1 }).at(x, y, z);
+    p.k = .15 + R() * .55; p.off = 21 + R() * 2.5; p.early = R() < .35 ? 5.5 + R() * 1.2 : 0; p.visible = false; g.add(p); self.litPanes && self.litPanes.push(p); return p; };
   const SNOW = '#f4f7fb';
   // Stab von a nach b (lokal)
   function rod(a, b, r, col) {
@@ -86,6 +89,7 @@
     const F = this.farm; if (!F) return;
     const SEA = this.season, W = SEA === 'winter', AU = SEA === 'autumn', R = rng(321);
     const farm = new Node().at(F.x, F.level, F.z); farm.rot = [0, F.yaw, 0];
+    const lit = new Node().at(F.x, F.level, F.z), litH = new Node().at(-5.5, 0, -3.5), LR = rng(77); lit.rot = farm.rot; lit.add(litH); this.litGroups && this.litGroups.push(lit);
     const add = (...n) => farm.add(...n);
     // --- Berner Bauernhaus: weisser Sockel, Holz-Obergeschoss, mächtiges Walmdach mit Ründi ---
     { const h = new Node().at(-5.5, 0, -3.5);
@@ -94,7 +98,7 @@
       if (W) h.add(N(roofGeo(6.6, 5.4, 3.3, 9, .32, .16), SNOW));
       h.add(N(G.torus(3.3, .16, 22, 5, PI), '#d9c49a', 0, 4.5, 4.12), N(G.torus(3.0, .07, 22, 4, PI), '#7a4622', 0, 4.5, 4.1));     // Ründi
       for (let i = 0; i < 7; i++) h.add(box(.05, 1.6, .04, '#7a4622', -3 + i, 5.3, 4.03));
-      const win = (x, y, z, big) => { const s = big ? 1 : .8;
+      const win = (x, y, z, big) => { const s = big ? 1 : .8; litPane(this, litH, G.box(.72 * s, .82 * s, .008), x, y, z + .072, LR);
         h.add(box(.95 * s, 1.05 * s, .05, '#ffffff', x, y, z + .02), box(.74 * s, .84 * s, .05, '#2a3d52', x, y, z + .045), box(.05, .84 * s, .055, '#ffffff', x, y, z + .05),
           box(.38 * s, 1.05 * s, .04, '#2f6b3a', x - .68 * s, y, z + .03), box(.38 * s, 1.05 * s, .04, '#2f6b3a', x + .68 * s, y, z + .03), box(1 * s, .2, .3, '#7a4a2a', x, y - .62 * s, z + .17));
         if (W) { h.add(box(1 * s, .08, .3, SNOW, x, y - .48 * s, z + .17)); for (let k = 0; k < 3; k++) h.add(sph(.09, '#2f6b3a', x - .3 + k * .3, y - .44 * s, z + .2), sph(.05, '#e63946', x - .25 + k * .3, y - .4 * s, z + .3)); }
@@ -102,7 +106,7 @@
       [-3.9, -2.4, 2.4, 3.9].forEach(x => win(x, 1.45, 4, true));
       [-4, -2.7, -1.35, 1.35, 2.7, 4].forEach(x => win(x, 3.55, 4, false));
       win(-1.1, 5.7, 4, false); win(1.1, 5.7, 4, false);
-      for (const sx of [-1, 1]) for (const z of [-2.2, 0, 2.2]) h.add(box(.05, .95, .8, '#ffffff', sx * 5.02, 1.45, z), box(.05, .78, .62, '#2a3d52', sx * 5.04, 1.45, z));
+      for (const sx of [-1, 1]) for (const z of [-2.2, 0, 2.2]) h.add(box(.05, .95, .8, '#ffffff', sx * 5.02, 1.45, z), box(.05, .78, .62, '#2a3d52', sx * 5.04, 1.45, z)) && litPane(this, litH, G.box(.02, .76, .6), sx * 5.075, 1.45, z, LR);
       h.add(box(1.2, 2.1, .06, '#6b4426', 0, 1.05, 4.03), box(1.36, .12, .08, '#ffffff', 0, 2.16, 4.03), box(1.9, .2, .9, '#a8a8a8', 0, .1, 4.45), sph(.05, '#d9a520', .4, 1.05, 4.08));
       h.add(box(.7, 2, .7, '#d8d2c8', 2.4, 7.5, -1.5), box(.9, .12, .9, '#555555', 2.4, 8.55, -1.5));
       h.add(box(.9, 1.7, 5.6, '#9a7448', -5.55, .85, -1), box(1.1, .1, 5.9, '#6b4a2b', -5.6, 1.75, -1));     // Holzbeige
@@ -235,13 +239,13 @@
 
   // ---------- Zielarena: Absperrgitter, Tribüne, Wimpel und 50 Fans ----------
   Fo.prototype.planArena = function (P) {
-    const T = P.total, R = rng(808), st = 1.25 / T, slots = [];
-    const rows = [[-1, 6.5, 0, .893, .99, 0], [1, 6.5, 0, .893, .953, 0], [-1, 7.6, 0, .893, .99, 1], [1, 7.6, 0, .893, .953, 1], [-1, 8.85, .5, .897, .99, 0], [-1, 9.95, 1.0, .897, .99, 1]].map(r => (r[1] += WX, r));
+    const T = P.total, R = rng(808), st = 1.1 / T, slots = [];
+    const rows = [[-1, 6.5, 0, .893, .99, 0], [1, 6.5, 0, .893, .953, 0], [-1, 7.6, 0, .893, .99, 1], [1, 7.6, 0, .893, .953, 1], [1, 8.7, 0, .893, .953, 0], [-1, 8.85, .5, .897, .99, 0], [-1, 9.95, 1.0, .897, .99, 1]].map(r => (r[1] += WX, r));
     rows.forEach(([sd, off, lift, t0, t1, stag], ri) => {
       for (let t = t0 + (stag ? st / 2 : 0); t <= t1; t += st) { const q = P.at(t), x = q.p[0] + q.side[0] * sd * off, z = q.p[2] + q.side[2] * sd * off;
         const s = sd < 0 ? (t - .893) / (.99 - .893) : 1 + (.953 - t) / (.953 - .893);
         slots.push({ x, z, lift, ri, s, yaw: Math.atan2(sd * q.side[2], -sd * q.side[0]) + (R() - .5) * .35 }); } });
-    const members = slots.slice(0, 50);
+    const PP = this.podPlan, members = slots.filter(s => !PP || Math.hypot(s.x - PP.x, s.z - PP.z) > 6.4).slice(0, 50);   // Siegerpodest freihalten
     const KINDS = ['flag', 'bell', 'sign', 'cheer', 'wave', 'sign', 'cheer', 'flag', 'bell', 'sign'], TEXTS = ['ZIEL!', 'HOPP!', 'BRAVO', 'SUPER', 'GO GO', 'WOW!', 'TOP!', 'JA!', '♥ ♥', 'ALLEZ'];
     members.forEach((m, i) => { m.kind = KINDS[Math.floor(R() * KINDS.length)]; m.text = TEXTS[Math.floor(R() * TEXTS.length)]; this.addObs(m.x, m.z, .5); });
     const q = P.at(.94); this.arena = { members };
@@ -311,6 +315,9 @@
   'use strict';
   const Fo = window.Forest; if (!Fo) return;
   const { G, Node, merge } = window.Mini3D, PI = Math.PI, WX = Fo.TW || 0;
+  // Leuchtende Fensterscheibe (unsichtbar am Tag); k = Dämmerungsschwelle, off = Lichterlöschen (Uhrzeit), early = morgens schon an
+  const litPane = (self, g, geo, x, y, z, R) => { const p = new Node(geo, ['#ffd27a', '#ffc861', '#ffe0a0'][Math.floor(R() * 3)], { emis: 1 }).at(x, y, z);
+    p.k = .15 + R() * .55; p.off = 21 + R() * 2.5; p.early = R() < .35 ? 5.5 + R() * 1.2 : 0; p.visible = false; g.add(p); self.litPanes && self.litPanes.push(p); return p; };
   const N = (geo, col, x = 0, y = 0, z = 0, opt) => new Node(geo, col, opt).at(x, y, z);
   const box = (w, h, d, c, x, y, z, opt) => N(G.box(w, h, d), c, x, y, z, opt);
   const cyl = (rt, rb, h, seg, c, x, y, z) => N(G.cyl(rt, rb, h, seg), c, x, y, z);
@@ -411,6 +418,9 @@
       house.add(box(4.4, 2.5, 3.6, '#9a958c', 0, -.75, 0), box(4.2, 2.6, 3.4, '#efe7d6', 0, 1.75, 0), box(4.24, .12, 3.44, '#7a4622', 0, 3.0, 0));
       for (const xx of [-2.05, 2.05]) for (const zz of [-1.65, 1.65]) house.add(box(.16, 2.6, .16, '#6b4426', xx, 1.75, zz));
       house.add(box(4.2, .14, .06, '#6b4426', 0, 1.9, 1.71), box(4.2, .14, .06, '#6b4426', 0, 1.9, -1.71));
+      { const lit = new Node().at(hx, hy, hz), LR = rng(91); lit.rot = house.rot; this.litGroups && this.litGroups.push(lit);   // Müllerstube: Fenster leuchten abends
+        for (const sz of [-1, 1]) litPane(this, lit, G.box(.62, .62, .02), 1.0, 2.0, sz * 1.765, LR);
+        for (const xx of [-2.1, 2.1]) litPane(this, lit, G.box(.02, .44, .44), xx * 1.003 + Math.sign(xx) * .045, 3.55, 0, LR); }
       const roof = G.custom(B => { const a = 2.7, b = 2.4, y0 = 3.0, y1 = 4.9; for (const sx of [-1, 1]) { const q = [[sx * 0 + 0, y1, -a], [0, y1, a], [0, y0, a], [0, y0, -a]];
         const p = [[0, y1, -a], [0, y1, a], [sx * b, y0, a], [sx * b, y0, -a]]; const c = [0, y0 - 3, 0];
         const fc = (pp, inside) => { const u = [pp[1][0] - pp[0][0], pp[1][1] - pp[0][1], pp[1][2] - pp[0][2]], v = [pp[2][0] - pp[0][0], pp[2][1] - pp[0][1], pp[2][2] - pp[0][2]], n = [u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0]], m = [(pp[0][0] + pp[2][0]) / 2 - inside[0], (pp[0][1] + pp[2][1]) / 2 - inside[1], (pp[0][2] + pp[2][2]) / 2 - inside[2]];
