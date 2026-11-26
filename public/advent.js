@@ -114,6 +114,28 @@
   // Bart am Kopf einer Figur
   const beard = (p, col) => { const h = p.anim.head; h.add(N(G.sphere(.12, 8, 6), col, .1, -.06, 0).scale(.6, 1.15, 1), N(G.sphere(.06, 6, 4), col, .13, .02, 0).scale(.5, .5, 1.6)); };
 
+  // ---------- Muskelprotze (oben ohne) ----------
+  // dynamisches Stabsegment von a nach b (gleiche Ausrichtung wie Models.rod)
+  const seg = (r, col) => new Node(G.cyl(r, r * .92, 1, 8), col);
+  const setSeg = (n, a, b) => { const dx = b[0] - a[0], dy = b[1] - a[1], dz = b[2] - a[2], len = Math.hypot(dx, dy, dz) || 1e-6, tz = Math.acos(Math.max(-1, Math.min(1, dy / len))), sz = Math.sin(tz);
+    n.pos = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2, (a[2] + b[2]) / 2]; n.rot = [0, sz > 1e-6 ? Math.atan2(dz / len, -dx / len) : 0, tz]; n.scl = [1, len, 1]; };
+  // Oberkörper-Muskeln auf eine Figur legen (Koordinaten wie Models.person: Schulterhöhe 1.01, Blick +X)
+  function muscles(p, sk, arms) {
+    const dk = shadeHex(sk, .86), b = new Node(), A = p.anim;
+    b.add(N(G.cyl(.28, .2, .34, 12), sk, 0, .9, 0).scale(.95, 1, 1.12));                                   // breiter Rücken (V-Form)
+    for (const sd of [-1, 1]) {
+      b.add(N(G.sphere(.13, 10, 7), sk, .14, .96, sd * .1).scale(.62, .72, 1), N(G.sphere(.11, 8, 6), sk, -.02, 1.04, sd * .27),   // Brust, Schultern
+        N(G.sphere(.1, 8, 6), sk, -.04, 1.09, sd * .13).scale(1, .7, 1.1), N(G.box(.012, .012, .09), dk, .215, .9, sd * .085).rotate(sd * .5, 0, 0));
+      for (let r = 0; r < 3; r++) b.add(N(G.box(.04, .058, .062), r % 2 ? sk : dk, .208 - r * .006, .83 - r * .07, sd * .038).scale(1, 1, 1));   // Bauchmuskeln
+    }
+    b.add(N(G.box(.02, .2, .006), dk, .222, .76, 0), N(G.cyl(.245, .245, .06, 12), '#1b1b1f', 0, .61, 0));   // Linea alba, Gürtel
+    A.bob.add(merge(b));
+    if (arms) { const m = new Node(); for (const [sd, hp] of arms) { const a = [-.01, 0, sd * .215], el = [(a[0] + hp[0]) / 2 + .05, (a[1] + hp[1]) / 2 - .04, (a[2] + hp[2]) / 2 + sd * .07];
+      m.add(rod(a, el, .088, sk), N(G.sphere(.095, 8, 6), sk, (a[0] + el[0]) / 2 + .03, (a[1] + el[1]) / 2, (a[2] + el[2]) / 2).scale(1.1, 1, 1), N(G.sphere(.07, 7, 5), sk, ...el), rod(el, hp, .07, sk)); }
+      A.upper.add(merge(m)); }
+  }
+  function shadeHex(h, f) { const n = parseInt(h.slice(1), 16), c = [(n >> 16) & 255, (n >> 8) & 255, n & 255].map(v => Math.round(v * f)); return '#' + c.map(v => v.toString(16).padStart(2, '0')).join(''); }
+
   // ---------- Bauplatz-Suche ----------
   Fo.prototype.advFree = function (x, z, r, o = {}) {
     const P = this.path, MS = this.massif, PP = this.podPlan, S = this.stream, gm = this.games;
@@ -148,7 +170,7 @@
     this.advStatic = []; this.advDyn = []; this.advUpd = []; this.advFocus = {}; this.advObsList = [];
     const P = this.path, H = (x, z) => this.height(x, z), self = this, R = rng(1225);
     const obs = (id, x, z, r) => { this.addObs(x, z, r); for (const l of this.obs.values()) { const o = l[l.length - 1]; if (o && o[0] === x && o[1] === z && o[2] === r && !this.advObsList.includes(o)) this.advObsList.push(o); } };
-    const CAM = { wut: [4.5, 1], kranz: [3.2, .8], 1: [16, 3], 2: [6, 1.2], 3: [4, 1.5], 4: [16, 3], 5: [4.5, .6], 6: [5, .6], 7: [14, 1], 8: [9, 1], 9: [9, 1], 10: [8, 1.2], 11: [8, 1.5], 12: [8, .8], 13: [8, 1.3], 14: [7, 1], 15: [9, .6], 16: [9, 2], 17: [20, 1], 18: [8, 1.3], 19: [8, 1.3], 20: [16, 1], 21: [18, 1.5], 22: [9, 1.5], 23: [60, 0], 24: [26, 5] };
+    const CAM = { wut: [4.5, 1], bank: [4.5, .6], gabel: [6, 1.5], kranz: [3.2, .8], 1: [16, 3], 2: [6, 1.2], 3: [4, 1.5], 4: [16, 3], 5: [4.5, .6], 6: [5, .6], 7: [14, 1], 8: [9, 1], 9: [9, 1], 10: [8, 1.2], 11: [8, 1.5], 12: [8, .8], 13: [8, 1.3], 14: [7, 1], 15: [9, .6], 16: [9, 2], 17: [20, 1], 18: [8, 1.3], 19: [8, 1.3], 20: [16, 1], 21: [18, 1.5], 22: [9, 1.5], 23: [60, 0], 24: [26, 5] };
     // Kamera blickt von der Strecke her auf den Gegenstand (dort ist es frei)
     const camFor = (d, n) => { const c = CAM[d]; if (c && !n.anim) { n.camDist = c[0]; n.camH = c[1]; } else if (c) n.camDist = c[0];
       if (!n.anim && d !== 23) { let bd = 1e9, bp = null; for (let i = 0; i <= 200; i++) { const q = P.at(i / 200), dd = Math.hypot(q.p[0] - n.pos[0], q.p[2] - n.pos[2]); if (dd < bd) { bd = dd; bp = q.p; } }
@@ -186,6 +208,55 @@
           if (!sp2 || sp2[0] < -40 || sp2[0] > Wd + 40 || sp2[1] < -20 || sp2[1] > Hd + 20 || Math.hypot(this.cam.target[0] - x, this.cam.target[2] - z) > 40) { el.style.opacity = '0'; return; }
           el.style.transform = `translate(${sp2[0]}px,${sp2[1]}px) translate(-50%,-100%)`; el.style.opacity = on ? String(Math.min(1, cyc * 3, (4 - cyc) * 3)) : '0'; });
         focus('wut', w, 'Wütende Frau'); this.angry = w; } }
+
+    // ===== Muskelprotze beim Bauernhof (ganzjährig) =====
+    if (this.farm) { const F = this.farm, SK = '#d9a07a', ts = this.path.at(.5);
+      const faceTrack = (x, z) => { let bd = 1e9, bp = null; for (let i = 0; i <= 100; i++) { const q = P.at(i / 100), d = Math.hypot(q.p[0] - x, q.p[2] - z); if (d < bd) { bd = d; bp = q.p; } } return Math.atan2(-(bp[2] - z), bp[0] - x); };
+      // 1) Bankdrücken neben dem Hof
+      const pb = F.w(-15, 1.5), sp = this.advSpot(pb[0], pb[1], 1.4, { step: .6 });
+      if (sp) { const [x, z] = sp, yaw = faceTrack(x, z) + PI / 2, y0 = H(x, z), it = item(x, y0, z, yaw);
+        // Hantelbank (entlang lokaler X-Achse), Ablage, Scheiben, Kurzhanteln, Gummimatte
+        it.s.add(box(2.0, .03, 1.5, '#2b2d31', 0, .015, 0), box(1.25, .1, .3, '#1b1b1f', -.05, .46, 0), box(1.15, .05, .26, '#c1121f', -.05, .52, 0));
+        for (const bx of [-.55, .45]) it.s.add(box(.06, .42, .06, '#8d9399', bx, .21, 0), box(.06, .04, .4, '#8d9399', bx, .02, 0));
+        for (const sd of [-1, 1]) { it.s.add(box(.06, 1.25, .06, '#8d9399', -.62, .62, sd * .5), box(.12, .04, .06, '#8d9399', -.56, 1.08, sd * .5), box(.3, .04, .06, '#8d9399', -.72, .02, sd * .5));
+          for (let k = 0; k < 3; k++) it.s.add(N(G.cyl(.22 - k * .04, .22 - k * .04, .04, 14), '#1b1b1f', -.8 + k * .02, .22 - k * .04 + .02, sd * .78).rotate(PI / 2, 0, 0)); }
+        for (const [dx2, dz2] of [[.75, .55], [.85, .4]]) { it.s.add(N(G.cyl(.018, .018, .32, 6), '#8d9399', dx2, .06, dz2).rotate(PI / 2, 0, 0)); for (const e of [-.13, .13]) it.s.add(N(G.cyl(.06, .06, .06, 8), '#1b1b1f', dx2, .06, dz2 + e).rotate(PI / 2, 0, 0)); }
+        place('bank', it, 'Bankdrücker', 3); obs('bank', x, z, 1.1);
+        // Athlet: auf dem Rücken liegend (Blick nach oben), Kopf zur Ablage
+        const holder = dyn(new Node().at(x, y0, z)); holder.rot = [0, yaw, 0];
+        const man = (person({ suit: SK, suit2: SK, skin: SK, pattern: 'solid', hat: 'none', hair: 'short', hairColor: '#1d1a17', pants: '#2d3a55' }, 'stand', 1.08));
+        const A = man.anim; A.upper.children.length = 0; muscles(man, SK, null);
+        A.head.add(N(G.box(.05, .045, .42), '#c1121f', .02, .27, 0));                                                    // Stirnband
+        const c = Math.cos(yaw), s = Math.sin(yaw), W = (u, v) => [x + u * c + v * s, z - u * s + v * c], [mx, mz] = W(-.4, 0);
+        man.pos = [.64, .8, 0]; man.rot = [0, 0, PI / 2]; man.children.shift(); holder.add(man);   // ohne Bodenschatten   // liegt auf dem Rücken, Kopf Richtung Ablage
+        for (const l of A.legs) l.rot = [0, 0, -1.25];
+        // Arme mit Gelenken (Oberarm, Unterarm), Hantelstange
+        const armN = [-1, 1].map(sd => { const u = seg(.09, SK), f = seg(.07, SK), sh = N(G.sphere(.11, 8, 6), SK), el = N(G.sphere(.075, 7, 5), SK), hd2 = N(G.sphere(.065, 7, 5), SK), bi = N(G.sphere(.1, 8, 6), SK);
+          A.upper.add(u, f, sh, el, hd2, bi); return { sd, u, f, sh, el, hd: hd2, bi }; });
+        const bar = new Node(); bar.add(N(G.cyl(.022, .022, 1.9, 8), '#c0c7cf', 0, 0, 0).rotate(PI / 2, 0, 0));
+        for (const sd of [-1, 1]) { bar.add(N(G.cyl(.04, .04, .05, 8), '#8d9399', 0, 0, sd * .6).rotate(PI / 2, 0, 0)); for (let k = 0; k < 3; k++) bar.add(N(G.cyl(.24 - k * .05, .24 - k * .05, .05, 16), k === 1 ? '#c1121f' : '#1b1b1f', 0, 0, sd * (.67 + k * .055)).rotate(PI / 2, 0, 0)); }
+        A.upper.add(bar);
+        this.advUpd.push(t => { const cyc = t % 30, rep = cyc < 24 ? (cyc % 3) / 3 : 1;                // 8 Wiederholungen, dann Pause
+          const down = cyc < 24 ? (rep < .45 ? rep / .45 : rep < .8 ? 1 - (rep - .45) / .35 : 0) : 0, ease = .5 - .5 * Math.cos(down * PI);
+          const hx = .66 - ease * .4, strain = cyc < 24 && rep >= .45 && rep < .8;
+          A.upper.pos = [0, .62 + .39, 0]; A.upper.rot = [0, 0, 0]; A.bob.pos[1] = 0;
+          A.head.rot = [0, 0, strain ? Math.sin(t * 30) * .02 : 0];
+          for (const r of armN) { const S2 = [-.01, 0, r.sd * .215], Hh = [hx, -.02, r.sd * .42], d = Math.hypot(Hh[0] - S2[0], Hh[1] - S2[1], Hh[2] - S2[2]), L1 = .31, L2 = .3;
+            const dd = Math.min(d, L1 + L2 - .001), dir = [(Hh[0] - S2[0]) / d, (Hh[1] - S2[1]) / d, (Hh[2] - S2[2]) / d], aa = (L1 * L1 - L2 * L2 + dd * dd) / (2 * dd), hh = Math.sqrt(Math.max(0, L1 * L1 - aa * aa));
+            let pole = [-.7, -.25, r.sd * .9]; const pd = pole[0] * dir[0] + pole[1] * dir[1] + pole[2] * dir[2]; pole = pole.map((v, i) => v - pd * dir[i]); const pl = Math.hypot(...pole) || 1; pole = pole.map(v => v / pl);
+            const E = [S2[0] + dir[0] * aa + pole[0] * hh, S2[1] + dir[1] * aa + pole[1] * hh, S2[2] + dir[2] * aa + pole[2] * hh];
+            setSeg(r.u, S2, E); setSeg(r.f, E, Hh); r.sh.pos = S2; r.el.pos = E; r.hd.pos = Hh; r.bi.pos = [(S2[0] + E[0]) / 2 + .02, (S2[1] + E[1]) / 2 + .02, (S2[2] + E[2]) / 2]; r.bi.scl = strain ? [1.15, 1.15, 1.15] : [1, 1, 1]; }
+          bar.pos = [hx, -.02, 0];
+          for (const l of A.legs) l.rot = [0, 0, -1.25]; });
+        focus('bank', holder, 'Bankdrücker'); this.bencher = holder; }
+      // 2) Grosser Muskelprotz mit Mistgabel
+      const pf = F.w(14.5, 3), sp2 = this.advSpot(pf[0], pf[1], .6, { step: .6 });
+      if (sp2) { const [x, z] = sp2, yaw = faceTrack(x, z), g = dyn(person({ suit: SK, suit2: SK, skin: '#c98e62', pattern: 'solid', hat: 'none', hair: 'long', hairColor: '#3b2a1e', pants: '#4a5a3a' }, 'fork', 1.32));
+        muscles(g, '#c98e62', [[1, [.08, -.36, .26]], [-1, [.2, .05, -.26]]]); beard(g, '#3b2a1e');
+        g.pos = [x, H(x, z), z]; g.rot = [0, yaw, 0]; g.scl = [1.32, 1.32, 1.45]; obs('gabel', x, z, .6);
+        this.advUpd.push(t => { const A = g.anim, w = t % 12, lift = w > 8 && w < 10.5 ? Math.sin((w - 8) / 2.5 * PI) : 0;   // ab und zu Heu stemmen
+          Mo.animatePerson(g, t, false, 0, Math.sin(t * .3) * .4); A.upper.rot = [0, 0, -lift * .35]; A.bob.pos[1] = Math.sin(t * 1.2) * .01; });
+        focus('gabel', g, 'Muskelprotz mit Mistgabel'); this.forkman = g; } }
 
     // ===== Adventskranz beim Pingpong-Tisch (ab 1. Advent) =====
     if (st.wreath && this.games) { const gm = this.games, pref = gm.w(-4, 3.3);
