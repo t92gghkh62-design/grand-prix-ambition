@@ -148,7 +148,7 @@
     this.advStatic = []; this.advDyn = []; this.advUpd = []; this.advFocus = {}; this.advObsList = [];
     const P = this.path, H = (x, z) => this.height(x, z), self = this, R = rng(1225);
     const obs = (id, x, z, r) => { this.addObs(x, z, r); for (const l of this.obs.values()) { const o = l[l.length - 1]; if (o && o[0] === x && o[1] === z && o[2] === r && !this.advObsList.includes(o)) this.advObsList.push(o); } };
-    const CAM = { kranz: [3.2, .8], 1: [16, 3], 2: [6, 1.2], 3: [4, 1.5], 4: [16, 3], 5: [4.5, .6], 6: [5, .6], 7: [14, 1], 8: [9, 1], 9: [9, 1], 10: [8, 1.2], 11: [8, 1.5], 12: [8, .8], 13: [8, 1.3], 14: [7, 1], 15: [9, .6], 16: [9, 2], 17: [20, 1], 18: [8, 1.3], 19: [8, 1.3], 20: [16, 1], 21: [18, 1.5], 22: [9, 1.5], 23: [60, 0], 24: [26, 5] };
+    const CAM = { wut: [4.5, 1], kranz: [3.2, .8], 1: [16, 3], 2: [6, 1.2], 3: [4, 1.5], 4: [16, 3], 5: [4.5, .6], 6: [5, .6], 7: [14, 1], 8: [9, 1], 9: [9, 1], 10: [8, 1.2], 11: [8, 1.5], 12: [8, .8], 13: [8, 1.3], 14: [7, 1], 15: [9, .6], 16: [9, 2], 17: [20, 1], 18: [8, 1.3], 19: [8, 1.3], 20: [16, 1], 21: [18, 1.5], 22: [9, 1.5], 23: [60, 0], 24: [26, 5] };
     // Kamera blickt von der Strecke her auf den Gegenstand (dort ist es frei)
     const camFor = (d, n) => { const c = CAM[d]; if (c && !n.anim) { n.camDist = c[0]; n.camH = c[1]; } else if (c) n.camDist = c[0];
       if (!n.anim && d !== 23) { let bd = 1e9, bp = null; for (let i = 0; i <= 200; i++) { const q = P.at(i / 200), dd = Math.hypot(q.p[0] - n.pos[0], q.p[2] - n.pos[2]); if (dd < bd) { bd = dd; bp = q.p; } }
@@ -158,6 +158,34 @@
     const dyn = (n, upd) => { this.advDyn.push(n); if (upd) this.advUpd.push(upd); return n; };
     const flame = (x, y, z, s) => new Node(G.sphere(.03 * s, 6, 4), '#ffb02e', { emis: 1 }).at(x, y, z);
     const flick = f => t => { const k = .85 + Math.sin(t * 13 + f.ph) * .12 + Math.sin(t * 29 + f.ph * 2) * .06; f.scl = [k, 1.1 + (k - .85) * 2.2, k]; };
+
+    // ===== Wütende Frau mit Locken am Streckenrand (ganzjährig) =====
+    { const pref = sideAt(P, .35, 1, 8.8), sp = this.advSpot(pref[0], pref[1], .5, { track: 7.9 });
+      if (sp) { const [x, z] = sp, q = P.at(.35), yaw = Math.atan2(-(q.p[2] - z), q.p[0] - x);
+        const w = dyn(person({ suit: '#7b2cbf', suit2: '#7b2cbf', pattern: 'solid', hat: 'none', hair: 'curly', hairColor: '#8a3b1f', skin: '#f2c9a8', pants: '#2d3a55' }, 'wave', 1.05));
+        w.pos = [x, H(x, z), z]; w.rot = [0, yaw, 0]; obs('wut', x, z, .45);
+        // Gesicht: steil nach innen abfallende Brauen, Zornesfalte, heruntergezogene Mundwinkel, rote Wangen
+        const hd = w.anim.head, br = '#4a2412';
+        for (const sd of [-1, 1]) hd.add(N(G.box(.025, .03, .11), br, .178, .3, sd * .075).rotate(-sd * .55, 0, 0), sph(.045, '#ff6b6b', .15, .15, sd * .13));
+        hd.add(N(G.box(.01, .05, .012), '#c98e7a', .2, .27, 0), N(G.box(.03, .035, .12), '#f2c9a8', .197, .1, 0),
+          N(G.box(.02, .022, .06), '#6b1f1f', .205, .1, .035).rotate(.5, 0, 0), N(G.box(.02, .022, .06), '#6b1f1f', .205, .1, -.035).rotate(-.5, 0, 0));
+        // Dampfwölkchen aus den Ohren
+        const puffs = []; for (let i = 0; i < 6; i++) { const p = dyn(new Node(G.sphere(.07, 6, 4), '#f1f3f5', { alpha: .7 })); p.ph = i / 6; p.sd = i % 2 ? 1 : -1; puffs.push(p); }
+        // Sprechblase ab und zu
+        if (!this.angryEl) { this.angryEl = document.createElement('div'); this.angryEl.className = 'say'; this.angryEl.style.opacity = '0'; this.layer.appendChild(this.angryEl); }
+        const el = this.angryEl, SAY = ['Grrr! 😤', 'Wo bleiben die Termine?! 😠', 'Gas geben! 💢', 'So nicht! 😡', 'Hopp jetzt! 😤'];
+        this.advUpd.push(t => { const A = w.anim, c = Math.cos(yaw), s = Math.sin(yaw);
+          A.legs.forEach((l, i) => { l.rot[2] = Math.max(0, Math.sin(t * 7 + i * PI)) * .35; });                      // Stampfen
+          A.bob.pos[1] = Math.abs(Math.sin(t * 7)) * .04; A.upper.rot = [Math.sin(t * 7) * .06, 0, -.08];
+          if (A.wave) A.wave.rot = [Math.sin(t * 16) * .35 - .25, 0, 0];                                         // Faust schütteln
+          A.head.rot = [Math.sin(t * 9) * .08, Math.sin(t * 2.3) * .35, -.05];                                    // Kopfschütteln
+          const hy = w.pos[1] + 1.55;   // Ohrenhöhe (+0.3)
+          puffs.forEach(p => { const f = (t * .8 + p.ph) % 1, ex = p.sd * .25 * 1.05; p.pos = [w.pos[0] + s * ex * (1 + f * .8), hy - .2 + f * .7, w.pos[2] + c * ex * (1 + f * .8)]; const k = .5 + f * 1.3; p.scl = [k, k, k]; p.alpha = .7 * (1 - f); });
+          const cyc = t % 16, on = cyc < 4, sp2 = (() => { try { return this.r.project([w.pos[0], hy + .6, w.pos[2]]); } catch (e) { return null; } })(), Wd = this.canvas.clientWidth, Hd = this.canvas.clientHeight;
+          const kk = Math.floor(t / 16); if (el.k !== kk) { el.k = kk; el.textContent = SAY[kk % SAY.length]; }
+          if (!sp2 || sp2[0] < -40 || sp2[0] > Wd + 40 || sp2[1] < -20 || sp2[1] > Hd + 20 || Math.hypot(this.cam.target[0] - x, this.cam.target[2] - z) > 40) { el.style.opacity = '0'; return; }
+          el.style.transform = `translate(${sp2[0]}px,${sp2[1]}px) translate(-50%,-100%)`; el.style.opacity = on ? String(Math.min(1, cyc * 3, (4 - cyc) * 3)) : '0'; });
+        focus('wut', w, 'Wütende Frau'); this.angry = w; } }
 
     // ===== Adventskranz beim Pingpong-Tisch (ab 1. Advent) =====
     if (st.wreath && this.games) { const gm = this.games, pref = gm.w(-4, 3.3);
